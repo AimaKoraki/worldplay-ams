@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using WorldplayAMS.Core.Models;
 
@@ -8,12 +9,14 @@ public class SessionManagerService
     private readonly Supabase.Client _supabase;
     private readonly IFallbackCacheService _fallbackCache;
     private readonly ILogger<SessionManagerService> _logger;
+    private readonly decimal _ratePerMinute;
 
-    public SessionManagerService(Supabase.Client supabase, IFallbackCacheService fallbackCache, ILogger<SessionManagerService> logger)
+    public SessionManagerService(Supabase.Client supabase, IFallbackCacheService fallbackCache, ILogger<SessionManagerService> logger, IConfiguration configuration)
     {
         _supabase = supabase;
         _fallbackCache = fallbackCache;
         _logger = logger;
+        _ratePerMinute = configuration.GetValue<decimal>("Billing:RatePerMinute", 0.15m);
     }
 
     public async Task<string> ProcessRfidTapAsync(string tagString)
@@ -54,9 +57,12 @@ public class SessionManagerService
                 session.Status = "Completed";
                 session.TotalDurationMinutes = (int)(session.EndTime.Value - session.StartTime).TotalMinutes;
 
+                // Calculate fee based on duration and configured rate
+                session.Fee = session.TotalDurationMinutes * _ratePerMinute;
+
                 // Update is performed directly on the mapped model with Postgrest
                 await _supabase.From<Session>().Update(session);
-                return $"Success: Checked out. Duration: {session.TotalDurationMinutes} min.";
+                return $"Success: Checked out. Duration: {session.TotalDurationMinutes} min | Fee: ${session.Fee:F2}";
             }
         }
         catch (Exception ex)

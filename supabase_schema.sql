@@ -25,7 +25,8 @@ CREATE TABLE Sessions (
     StartTime TIMESTAMPTZ DEFAULT NOW(),
     EndTime TIMESTAMPTZ,
     Status TEXT CHECK (Status IN ('Active', 'Completed')) DEFAULT 'Active',
-    TotalDurationMinutes INT
+    TotalDurationMinutes INT,
+    Fee DECIMAL(10,2)
 );
 
 -- Constraint: Ensure an RfidTag can only have one Active session at a time
