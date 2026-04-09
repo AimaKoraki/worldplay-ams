@@ -30,7 +30,7 @@ public class RfidReaderService : IRfidReaderService
         try
         {
             var response = await _supabase.From<RfidTag>()
-                .Where(t => t.TagUid == tagUid)
+                .Where(t => t.TagString == tagUid)
                 .Single();
 
             if (response != null)

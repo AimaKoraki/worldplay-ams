@@ -89,4 +89,17 @@ public class MachineMonitoringService
             return new List<ArcadeMachine>();
         }
     }
+    public async Task<List<MachineUsageLog>> GetUsageLogsAsync()
+    {
+        try
+        {
+            var response = await _supabase.From<MachineUsageLog>().Get();
+            return response.Models ?? new List<MachineUsageLog>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get machine usage logs");
+            return new List<MachineUsageLog>();
+        }
+    }
 }

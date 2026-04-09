@@ -1,0 +1,208 @@
+@page "/sessions"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Staff")]
+@inject IHttpClientFactory ClientFactory
+
+<PageTitle>Worldplay AMS — Session History</PageTitle>
+
+<div class="history-wrap">
+
+    <!-- Page Header -->
+    <div class="page-header mb-5">
+        <div>
+            <h1 class="page-title">
+                <span class="bi bi-clock-history me-3" style="color:var(--neon-purple);"></span>Session History
+            </h1>
+            <p class="page-subtitle">View completed guest sessions and billing records</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn-neon btn-neon-cyan" @onclick="LoadHistory">
+                <span class="bi bi-arrow-repeat"></span> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Revenue Summary Strip -->
+    <div class="revenue-strip mb-5">
+        <div class="strip-item">
+            <span class="bi bi-receipt-cutoff" style="color:var(--neon-amber);"></span>
+            <span>@sessions.Count Total Sessions</span>
+        </div>
+        <div class="strip-divider"></div>
+        <div class="strip-item">
+            <span class="bi bi-clock" style="color:var(--neon-cyan);"></span>
+            <span>@totalMinutes min Total Playtime</span>
+        </div>
+        <div class="strip-divider"></div>
+        <div class="strip-item">
+            <span class="bi bi-cash-coin" style="color:var(--status-active);"></span>
+            <span>$@totalRevenue.ToString("F2") Total Revenue</span>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="empty-state-full">
+            <span class="bi bi-arrow-repeat rotating" style="font-size:2.5rem; color:var(--neon-cyan);"></span>
+            <p class="mt-3">Loading session records...</p>
+        </div>
+    }
+    else if (!sessions.Any())
+    {
+        <div class="glass-card empty-state-full">
+            <span class="bi bi-inbox" style="font-size:3rem; color:var(--text-disabled);"></span>
+            <h3 class="mt-3 text-white">No Completed Sessions</h3>
+            <p class="mt-1 text-muted-custom">Sessions will appear here once guests check out.</p>
+        </div>
+    }
+    else
+    {
+        <div class="glass-card" style="border-top: 3px solid var(--neon-purple); padding:0; overflow:hidden;">
+            <div style="padding: 1.5rem 1.75rem 0.75rem;">
+                <p class="section-title"><span class="bi bi-list-check text-purple"></span> Completed Sessions</p>
+            </div>
+            <div class="table-responsive">
+                <table class="table-glass">
+                    <thead>
+                        <tr>
+                            <th>Session ID</th>
+                            <th>Tag ID</th>
+                            <th>Check-In</th>
+                            <th>Check-Out</th>
+                            <th>Duration</th>
+                            <th>Fee</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in sessions)
+                        {
+                            <tr>
+                                <td class="font-mono text-cyan fw-bold" style="font-size:0.82rem;">
+                                    #@s.Id.ToString().Substring(0, 8).ToUpper()
+                                </td>
+                                <td class="font-mono" style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @s.RfidTagId.ToString().Substring(0, 8).ToUpper()
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @s.StartTime.ToLocalTime().ToString("MMM dd, HH:mm")
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @(s.EndTime.HasValue ? s.EndTime.Value.ToLocalTime().ToString("MMM dd, HH:mm") : "—")
+                                </td>
+                                <td>
+                                    <span class="badge-neon info">@(s.TotalDurationMinutes ?? 0) min</span>
+                                </td>
+                                <td>
+                                    <span class="fee-value">$@((s.Fee ?? 0).ToString("F2"))</span>
+                                </td>
+                                <td>
+                                    <span class="badge-neon active"><span class="bi bi-check-circle-fill"></span> Completed</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .history-wrap { padding-bottom: 2rem; }
+
+    .page-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #fff 40%, var(--neon-purple) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+    .page-subtitle { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.3rem; }
+
+    .revenue-strip {
+        display: flex;
+        align-items: center;
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        padding: 0.9rem 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    .strip-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-family: var(--font-heading);
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+    .strip-divider { width: 1px; height: 20px; background: var(--surface-border); flex-shrink: 0; }
+
+    .fee-value {
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--status-active);
+    }
+
+    .empty-state-full {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 280px; text-align: center; color: var(--text-secondary);
+    }
+
+    .table-responsive { overflow-x: auto; padding: 0 0.5rem 1rem; }
+</style>
+
+@code {
+    private List<SessionHistoryDto> sessions = new();
+    private bool isLoading = true;
+    private int totalMinutes = 0;
+    private decimal totalRevenue = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHistory();
+    }
+
+    private async Task LoadHistory()
+    {
+        isLoading = true;
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            var result = await client.GetFromJsonAsync<List<SessionHistoryDto>>("/api/sessions/history");
+            sessions = result ?? new();
+            totalMinutes = sessions.Sum(s => s.TotalDurationMinutes ?? 0);
+            totalRevenue = sessions.Sum(s => s.Fee ?? 0);
+        }
+        catch
+        {
+            sessions = new();
+        }
+        isLoading = false;
+    }
+
+    private class SessionHistoryDto
+    {
+        public Guid Id { get; set; }
+        public Guid RfidTagId { get; set; }
+        public DateTime StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public int? TotalDurationMinutes { get; set; }
+        public decimal? Fee { get; set; }
+    }
+}
