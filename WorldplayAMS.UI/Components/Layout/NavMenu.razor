@@ -1,3 +1,7 @@
+@using WorldplayAMS.UI.Auth
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">WorldplayAMS.UI</a>
@@ -8,27 +12,54 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="scanner">
-                <span class="bi bi-upc-scan-nav-menu" aria-hidden="true"></span> Scanner
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <AuthorizeView Roles="Admin,Technician">
-                <ChildContent>
-                    <NavLink class="nav-link" href="technician">
-                        <span class="bi bi-tools-nav-menu" aria-hidden="true"></span> Technician
+        <AuthorizeView>
+            <Authorized Context="authContext">
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                        <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
                     </NavLink>
-                </ChildContent>
-            </AuthorizeView>
-        </div>
+                </div>
+
+                <AuthorizeView Roles="Admin,Staff" Context="staffContext">
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="scanner">
+                            <span class="bi bi-upc-scan-nav-menu" aria-hidden="true"></span> Scanner
+                        </NavLink>
+                    </div>
+                </AuthorizeView>
+
+                <AuthorizeView Roles="Admin,Technician" Context="techContext">
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="technician">
+                            <span class="bi bi-tools-nav-menu" aria-hidden="true"></span> Technician
+                        </NavLink>
+                    </div>
+                </AuthorizeView>
+
+                <div class="nav-item px-3 mt-3">
+                    <button class="nav-link btn-logout" @onclick="Logout">
+                        <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Logout
+                    </button>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="login">
+                        <span class="bi bi-person-circle-nav-menu" aria-hidden="true"></span> Login
+                    </NavLink>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
     </nav>
 </div>
 
+@code {
+    private void Logout()
+    {
+        if (AuthStateProvider is SimulatedAuthStateProvider simulatedProvider)
+        {
+            simulatedProvider.Logout();
+            Nav.NavigateTo("/login");
+        }
+    }
+}
