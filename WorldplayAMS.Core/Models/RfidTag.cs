@@ -40,4 +40,7 @@ public class Session : BaseModel
 
     [Column("totaldurationminutes")]
     public int? TotalDurationMinutes { get; set; }
+
+    [Column("fee")]
+    public decimal? Fee { get; set; }
 }

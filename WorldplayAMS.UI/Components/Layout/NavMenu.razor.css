@@ -81,6 +81,20 @@
     color: white;
 }
 
+.btn-logout {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #d7d7d7;
+    font-size: 0.9rem;
+    padding: 0;
+    text-align: left;
+}
+
+.btn-logout:hover {
+    color: #ff6b6b;
+}
+
 .nav-scrollable {
     display: none;
 }
