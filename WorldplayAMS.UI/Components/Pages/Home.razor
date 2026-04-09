@@ -7,194 +7,472 @@
 <div class="dashboard-wrap">
 
     <!-- Page Header -->
-    <div class="page-header mb-5">
+    <div class="dash-header">
         <div>
-            <h1 class="page-title">Control Center</h1>
-            <p class="page-subtitle">Real-time overview of arcade terminals and session activity</p>
+            <h1 class="dash-title">
+                <span class="bi bi-grid-1x2-fill me-3 dash-title-icon"></span>Control Center
+            </h1>
+            <p class="dash-subtitle">Real-time overview of arcade terminals and session activity</p>
         </div>
-        <div class="header-actions">
-            <button class="btn-neon btn-neon-cyan" @onclick="LoadSessions">
+        <div class="dash-header-actions">
+            <button class="btn-neon btn-neon-cyan" @onclick="RefreshAll">
                 <span class="bi bi-arrow-repeat"></span> Refresh
             </button>
         </div>
     </div>
 
     <!-- KPI Stats Row -->
-    <div class="kpi-row mb-5">
-        <div class="stat-card accent-green">
-            <div class="stat-icon" style="background:rgba(0,230,118,0.12); color:var(--status-active);">
-                <span class="bi bi-display"></span>
-            </div>
-            <div>
-                <div class="stat-value">@activeSessions.Count</div>
-                <div class="stat-label">Active Sessions</div>
-            </div>
-        </div>
-        <div class="stat-card accent-cyan">
-            <div class="stat-icon" style="background:rgba(0,240,255,0.1); color:var(--neon-cyan);">
-                <span class="bi bi-people-fill"></span>
-            </div>
-            <div>
-                <div class="stat-value">@activeSessions.Count</div>
-                <div class="stat-label">Players Online</div>
+    <div class="kpi-grid">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-accent"></div>
+            <div class="kpi-body">
+                <div class="kpi-icon-wrap kpi-icon-green">
+                    <span class="bi bi-display"></span>
+                </div>
+                <div class="kpi-data">
+                    <span class="kpi-value">@activeSessions.Count</span>
+                    <span class="kpi-label">Active Sessions</span>
+                </div>
             </div>
         </div>
-        <div class="stat-card accent-amber">
-            <div class="stat-icon" style="background:rgba(255,184,0,0.1); color:var(--neon-amber);">
-                <span class="bi bi-clock-history"></span>
-            </div>
-            <div>
-                <div class="stat-value">@machineCount</div>
-                <div class="stat-label">Total Machines</div>
+
+        <div class="kpi-card kpi-cyan">
+            <div class="kpi-accent"></div>
+            <div class="kpi-body">
+                <div class="kpi-icon-wrap kpi-icon-cyan">
+                    <span class="bi bi-people-fill"></span>
+                </div>
+                <div class="kpi-data">
+                    <span class="kpi-value">@activeSessions.Count</span>
+                    <span class="kpi-label">Players Online</span>
+                </div>
             </div>
         </div>
-        <div class="stat-card accent-purple">
-            <div class="stat-icon" style="background:rgba(157,0,255,0.1); color:var(--neon-purple);">
-                <span class="bi bi-lightning-charge-fill"></span>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-accent"></div>
+            <div class="kpi-body">
+                <div class="kpi-icon-wrap kpi-icon-amber">
+                    <span class="bi bi-hdd-stack-fill"></span>
+                </div>
+                <div class="kpi-data">
+                    <span class="kpi-value">@machineCount</span>
+                    <span class="kpi-label">Total Machines</span>
+                </div>
             </div>
-            <div>
-                <div class="stat-value">₹@todayRevenue.ToString("F2")</div>
-                <div class="stat-label">Today's Revenue</div>
+        </div>
+
+        <div class="kpi-card kpi-purple">
+            <div class="kpi-accent"></div>
+            <div class="kpi-body">
+                <div class="kpi-icon-wrap kpi-icon-purple">
+                    <span class="bi bi-cash-coin"></span>
+                </div>
+                <div class="kpi-data">
+                    <span class="kpi-value">₹@todayRevenue.ToString("F2")</span>
+                    <span class="kpi-label">Today's Revenue</span>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Main Grid -->
-    <div class="dashboard-grid">
+    <div class="main-grid">
 
         <!-- Quick Actions Panel -->
-        <section class="glass-card quick-actions-panel" style="border-top: 3px solid var(--neon-cyan);">
-            <p class="section-title"><span class="bi bi-lightning-fill text-cyan"></span> Quick Actions</p>
+        <section class="panel-card">
+            <div class="panel-accent accent-cyan"></div>
+            <div class="panel-inner">
+                <p class="section-title"><span class="bi bi-lightning-fill text-cyan"></span> Quick Actions</p>
 
-            <button class="btn-neon btn-primary-action w-100 quick-action-btn mb-3" @onclick="SimulateRfidTap">
-                <span class="bi bi-upc-scan fs-5"></span>
-                <span>
-                    <span class="d-block" style="font-size:1rem;">Force Network Ping</span>
-                    <span class="d-block" style="font-size:0.72rem; opacity:0.75; font-weight:400;">Simulate RFID tap event</span>
-                </span>
-            </button>
+                <button class="action-tile action-primary" @onclick="SimulateRfidTap">
+                    <div class="action-icon-box icon-primary">
+                        <span class="bi bi-upc-scan"></span>
+                    </div>
+                    <div class="action-text">
+                        <span class="action-name">Force Network Ping</span>
+                        <span class="action-desc">Simulate RFID tap event</span>
+                    </div>
+                    <span class="bi bi-chevron-right action-arrow"></span>
+                </button>
 
-            <a href="/scanner" class="btn-neon btn-neon-cyan w-100 quick-action-btn mb-3">
-                <span class="bi bi-radar fs-5"></span>
-                <span>
-                    <span class="d-block" style="font-size:1rem;">Open Scanner</span>
-                    <span class="d-block" style="font-size:0.72rem; opacity:0.75; font-weight:400;">RFID check-in terminal</span>
-                </span>
-            </a>
+                <a href="/scanner" class="action-tile action-cyan">
+                    <div class="action-icon-box icon-cyan">
+                        <span class="bi bi-radar"></span>
+                    </div>
+                    <div class="action-text">
+                        <span class="action-name">Open Scanner</span>
+                        <span class="action-desc">RFID check-in terminal</span>
+                    </div>
+                    <span class="bi bi-chevron-right action-arrow"></span>
+                </a>
 
-            <a href="/technician" class="btn-neon btn-neon-purple w-100 quick-action-btn">
-                <span class="bi bi-gpu-card fs-5"></span>
-                <span>
-                    <span class="d-block" style="font-size:1rem;">Diagnostics Panel</span>
-                    <span class="d-block" style="font-size:0.72rem; opacity:0.75; font-weight:400;">Manage machine states</span>
-                </span>
-            </a>
+                <a href="/technician" class="action-tile action-purple">
+                    <div class="action-icon-box icon-purple">
+                        <span class="bi bi-gpu-card"></span>
+                    </div>
+                    <div class="action-text">
+                        <span class="action-name">Diagnostics Panel</span>
+                        <span class="action-desc">Manage machine states</span>
+                    </div>
+                    <span class="bi bi-chevron-right action-arrow"></span>
+                </a>
+
+                <a href="/sessions" class="action-tile action-amber">
+                    <div class="action-icon-box icon-amber">
+                        <span class="bi bi-clock-history"></span>
+                    </div>
+                    <div class="action-text">
+                        <span class="action-name">Session History</span>
+                        <span class="action-desc">View completed sessions & billing</span>
+                    </div>
+                    <span class="bi bi-chevron-right action-arrow"></span>
+                </a>
+            </div>
         </section>
 
         <!-- Live Sessions Table -->
-        <section class="glass-card" style="border-top: 3px solid var(--neon-purple);">
-            <p class="section-title"><span class="bi bi-activity text-purple"></span> Live Sessions</p>
+        <section class="panel-card">
+            <div class="panel-accent accent-purple"></div>
+            <div class="panel-inner">
+                <p class="section-title"><span class="bi bi-activity text-purple"></span> Live Sessions</p>
 
-            @if (activeSessions == null)
-            {
-                <div class="empty-state">
-                    <span class="bi bi-hourglass-split rotating" style="font-size:2rem; color:var(--text-secondary);"></span>
-                    <p class="mt-3">Establishing connection...</p>
-                </div>
-            }
-            else if (!activeSessions.Any())
-            {
-                <div class="empty-state">
-                    <span class="bi bi-hdd-network" style="font-size:2.5rem; color:var(--text-disabled);"></span>
-                    <p class="mt-3">No active sessions detected.</p>
-                    <span class="badge-neon idle mt-2">All Terminals Idle</span>
-                </div>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table-glass">
-                        <thead>
-                            <tr>
-                                <th>Session ID</th>
-                                <th>Tag ID</th>
-                                <th>Started</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var session in activeSessions)
-                            {
+                @if (activeSessions == null)
+                {
+                    <div class="empty-state">
+                        <span class="bi bi-hourglass-split rotating" style="font-size:2rem; color:var(--neon-cyan);"></span>
+                        <p class="mt-3">Establishing connection...</p>
+                    </div>
+                }
+                else if (!activeSessions.Any())
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon-ring">
+                            <span class="bi bi-hdd-network" style="font-size:2rem; color:var(--text-disabled);"></span>
+                        </div>
+                        <h3 class="empty-heading mt-4">No Active Sessions</h3>
+                        <p class="empty-desc mt-1">Sessions will appear here once guests check in via the RFID scanner.</p>
+                        <span class="badge-neon idle mt-3">All Terminals Idle</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table-glass">
+                            <thead>
                                 <tr>
-                                    <td class="font-mono text-cyan fw-bold" style="font-size:0.82rem;">
-                                        #@session.Id.ToString().Substring(0, 8).ToUpper()
-                                    </td>
-                                    <td class="text-white fw-medium font-mono" style="font-size:0.82rem;">@session.RfidTagId.ToString().Substring(0, 8).ToUpper()</td>
-                                    <td class="text-muted-custom" style="font-size:0.82rem;">@session.StartTime.ToLocalTime().ToString("HH:mm")</td>
-                                    <td><span class="badge-neon active"><span class="bi bi-record-circle-fill"></span> Active</span></td>
+                                    <th>Session ID</th>
+                                    <th>Tag ID</th>
+                                    <th>Started</th>
+                                    <th>Status</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
+                            </thead>
+                            <tbody>
+                                @foreach (var session in activeSessions)
+                                {
+                                    <tr>
+                                        <td class="font-mono text-cyan fw-bold" style="font-size:0.82rem;">
+                                            #@session.Id.ToString().Substring(0, 8).ToUpper()
+                                        </td>
+                                        <td class="font-mono" style="font-size:0.82rem; color:var(--text-secondary);">
+                                            @session.RfidTagId.ToString().Substring(0, 8).ToUpper()
+                                        </td>
+                                        <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                            @session.StartTime.ToLocalTime().ToString("MMM dd, HH:mm")
+                                        </td>
+                                        <td>
+                                            <span class="badge-neon active"><span class="bi bi-record-circle-fill"></span> Active</span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
         </section>
 
     </div>
 </div>
 
 <style>
-    .page-header {
+    /* ── DASHBOARD WRAPPER ─────────────────────────────────────── */
+    .dashboard-wrap { padding-bottom: 2rem; }
+
+    /* ── HEADER ─────────────────────────────────────────────────── */
+    .dash-header {
         display: flex;
         align-items: flex-end;
         justify-content: space-between;
-        gap: 1rem;
+        gap: 1.5rem;
         flex-wrap: wrap;
+        margin-bottom: 2rem;
     }
-    .page-title {
-        font-size: 1.9rem;
+
+    .dash-title {
+        font-size: 2rem;
         font-weight: 800;
         letter-spacing: -0.5px;
-        background: linear-gradient(135deg, #fff 40%, var(--neon-cyan) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--text-primary);
         margin: 0;
+        display: flex;
+        align-items: center;
     }
-    .page-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.3rem; }
 
-    .kpi-row {
+    .dash-title-icon {
+        color: var(--neon-cyan);
+        font-size: 1.6rem;
+        filter: drop-shadow(0 0 8px rgba(0,240,255,0.5));
+    }
+
+    .dash-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-top: 0.35rem;
+    }
+
+    /* ── KPI GRID ──────────────────────────────────────────────── */
+    .kpi-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(4, 1fr);
         gap: 1.25rem;
+        margin-bottom: 2rem;
     }
 
-    .dashboard-grid {
+    @@media (max-width: 1100px) {
+        .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @@media (max-width: 600px) {
+        .kpi-grid { grid-template-columns: 1fr; }
+    }
+
+    .kpi-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        position: relative;
+        transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+    }
+    .kpi-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .kpi-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--surface-border-strong);
+    }
+
+    .kpi-accent {
+        height: 3px;
+        width: 100%;
+    }
+    .kpi-green .kpi-accent  { background: linear-gradient(90deg, var(--status-active), transparent); }
+    .kpi-cyan .kpi-accent   { background: linear-gradient(90deg, var(--neon-cyan), transparent); }
+    .kpi-amber .kpi-accent  { background: linear-gradient(90deg, var(--neon-amber), transparent); }
+    .kpi-purple .kpi-accent { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+
+    .kpi-green:hover  { box-shadow: var(--shadow-card), 0 0 20px rgba(0,230,118,0.12); }
+    .kpi-cyan:hover   { box-shadow: var(--shadow-card), 0 0 20px rgba(0,240,255,0.12); }
+    .kpi-amber:hover  { box-shadow: var(--shadow-card), 0 0 20px rgba(255,184,0,0.12); }
+    .kpi-purple:hover { box-shadow: var(--shadow-card), 0 0 20px rgba(157,0,255,0.12); }
+
+    .kpi-body {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 1.5rem 1.75rem;
+    }
+
+    .kpi-icon-wrap {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        flex-shrink: 0;
+    }
+    .kpi-icon-green  { background: rgba(0,230,118,0.12); color: var(--status-active); }
+    .kpi-icon-cyan   { background: rgba(0,240,255,0.1);  color: var(--neon-cyan); }
+    .kpi-icon-amber  { background: rgba(255,184,0,0.1);  color: var(--neon-amber); }
+    .kpi-icon-purple { background: rgba(157,0,255,0.1);  color: var(--neon-purple); }
+
+    .kpi-data {
+        display: flex;
+        flex-direction: column;
+    }
+    .kpi-value {
+        font-family: var(--font-heading);
+        font-size: 1.85rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+    .kpi-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-top: 5px;
+    }
+
+    /* ── MAIN GRID ─────────────────────────────────────────────── */
+    .main-grid {
         display: grid;
         grid-template-columns: 1fr;
         gap: 1.5rem;
     }
-    @@media (min-width: 900px) {
-        .dashboard-grid { grid-template-columns: 300px 1fr; }
+    @@media (min-width: 960px) {
+        .main-grid { grid-template-columns: 340px 1fr; }
     }
 
-    .quick-action-btn {
-        border-radius: 10px;
-        padding: 1rem 1.25rem;
-        justify-content: flex-start;
+    /* ── PANEL CARDS ────────────────────────────────────────────── */
+    .panel-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        box-shadow: var(--shadow-card);
+        position: relative;
+    }
+
+    .panel-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    }
+
+    .panel-accent {
+        height: 3px;
+        width: 100%;
+    }
+    .accent-cyan   { background: linear-gradient(90deg, var(--neon-cyan), transparent); }
+    .accent-purple { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+
+    .panel-inner {
+        padding: 1.75rem;
+    }
+
+    /* ── ACTION TILES ──────────────────────────────────────────── */
+    .action-tile {
+        display: flex;
+        align-items: center;
         gap: 1rem;
-        text-align: left;
-        height: auto;
+        width: 100%;
+        padding: 1rem 1.1rem;
+        border-radius: 10px;
+        border: 1px solid var(--surface-border-strong);
+        background: var(--surface-raised);
+        cursor: pointer;
+        transition: all 0.25s ease;
+        text-decoration: none;
+        color: inherit;
+        margin-bottom: 0.75rem;
+    }
+    .action-tile:last-child { margin-bottom: 0; }
+
+    .action-tile:hover {
+        transform: translateX(4px);
+        border-color: rgba(255,255,255,0.2);
     }
 
+    .action-icon-box {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+        flex-shrink: 0;
+    }
+
+    .icon-primary { background: linear-gradient(135deg, var(--electric-blue), var(--neon-cyan)); color: #fff; box-shadow: 0 2px 12px rgba(32,96,255,0.35); }
+    .icon-cyan    { background: rgba(0,240,255,0.1);   color: var(--neon-cyan); }
+    .icon-purple  { background: rgba(157,0,255,0.1);  color: var(--neon-purple); }
+    .icon-amber   { background: rgba(255,184,0,0.1);  color: var(--neon-amber); }
+
+    .action-text {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .action-name {
+        font-family: var(--font-heading);
+        font-weight: 600;
+        font-size: 0.88rem;
+        color: var(--text-primary);
+    }
+    .action-desc {
+        font-size: 0.72rem;
+        color: var(--text-secondary);
+        margin-top: 1px;
+    }
+
+    .action-arrow {
+        color: var(--text-disabled);
+        font-size: 0.8rem;
+        transition: color 0.2s, transform 0.2s;
+    }
+    .action-tile:hover .action-arrow {
+        color: var(--text-primary);
+        transform: translateX(3px);
+    }
+
+    /* Hover accents */
+    .action-primary:hover { border-color: rgba(32,96,255,0.5); background: rgba(32,96,255,0.06); box-shadow: 0 0 16px rgba(32,96,255,0.1); }
+    .action-cyan:hover    { border-color: rgba(0,240,255,0.4); background: rgba(0,240,255,0.05); box-shadow: 0 0 16px rgba(0,240,255,0.08); }
+    .action-purple:hover  { border-color: rgba(157,0,255,0.4); background: rgba(157,0,255,0.05); box-shadow: 0 0 16px rgba(157,0,255,0.08); }
+    .action-amber:hover   { border-color: rgba(255,184,0,0.4); background: rgba(255,184,0,0.05); box-shadow: 0 0 16px rgba(255,184,0,0.08); }
+
+    /* ── EMPTY STATE ────────────────────────────────────────────── */
     .empty-state {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-height: 220px;
+        min-height: 260px;
         color: var(--text-secondary);
         text-align: center;
+        padding: 1rem;
+    }
+
+    .empty-icon-ring {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--surface-border-strong);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .empty-heading {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .empty-desc {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        max-width: 300px;
+    }
+
+    /* ── TABLE ──────────────────────────────────────────────────── */
+    .table-responsive {
+        overflow-x: auto;
+        margin: 0 -0.5rem;
+        padding: 0 0.5rem;
     }
 
     .fw-medium { font-weight: 500; }
@@ -209,6 +487,11 @@
     protected override async Task OnInitializedAsync()
     {
         httpClient = ClientFactory.CreateClient("ApiClient");
+        await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue());
+    }
+
+    private async Task RefreshAll()
+    {
         await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue());
     }
 
