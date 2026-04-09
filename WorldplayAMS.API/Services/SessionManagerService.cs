@@ -72,4 +72,52 @@ public class SessionManagerService
             return "Offline: Tap recorded locally. Will sync when online.";
         }
     }
+
+    public async Task<List<Session>> GetActiveSessionsAsync()
+    {
+        try
+        {
+            var response = await _supabase.From<Session>()
+                .Where(s => s.Status == "Active")
+                .Get();
+            return response.Models ?? new List<Session>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get active sessions");
+            return new List<Session>();
+        }
+    }
+
+    public async Task<List<Session>> GetCompletedSessionsAsync()
+    {
+        try
+        {
+            var response = await _supabase.From<Session>()
+                .Where(s => s.Status == "Completed")
+                .Get();
+            return response.Models ?? new List<Session>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get session history");
+            return new List<Session>();
+        }
+    }
+
+    public async Task<decimal> GetTodayRevenueAsync()
+    {
+        try
+        {
+            var sessions = await GetCompletedSessionsAsync();
+            return sessions
+                .Where(s => s.EndTime.HasValue && s.EndTime.Value.Date == DateTime.UtcNow.Date)
+                .Sum(s => s.Fee ?? 0);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to calculate today's revenue");
+            return 0;
+        }
+    }
 }

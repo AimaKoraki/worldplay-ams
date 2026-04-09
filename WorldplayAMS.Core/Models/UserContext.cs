@@ -3,7 +3,7 @@ using Postgrest.Models;
 
 namespace WorldplayAMS.Core.Models;
 
-[Table("user_contexts")]
+[Table("users")]
 public class UserContext : BaseModel
 {
     [PrimaryKey("id", false)]

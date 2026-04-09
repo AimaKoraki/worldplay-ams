@@ -1,30 +1,181 @@
-﻿@page "/Error"
+@page "/Error"
 @using System.Diagnostics
 
-<PageTitle>Error</PageTitle>
+<PageTitle>Worldplay AMS — System Error</PageTitle>
 
-<h1 class="text-danger">Error.</h1>
-<h2 class="text-danger">An error occurred while processing your request.</h2>
+<div class="error-page-wrap">
+    <div class="error-card glass-card">
 
-@if (ShowRequestId)
-{
-    <p>
-        <strong>Request ID:</strong> <code>@RequestId</code>
-    </p>
-}
+        <!-- Icon -->
+        <div class="error-icon-ring mb-4">
+            <span class="bi bi-exclamation-triangle-fill" style="font-size:2.2rem; color:#FF3D57;"></span>
+        </div>
 
-<h3>Development Mode</h3>
-<p>
-    Swapping to <strong>Development</strong> environment will display more detailed information about the error that occurred.
-</p>
-<p>
-    <strong>The Development environment shouldn't be enabled for deployed applications.</strong>
-    It can result in displaying sensitive information from exceptions to end users.
-    For local debugging, enable the <strong>Development</strong> environment by setting the <strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
-    and restarting the app.
-</p>
+        <!-- Heading -->
+        <h1 class="error-title">System Error</h1>
+        <p class="error-subtitle">An unhandled exception occurred while processing your request.</p>
 
-@code{
+        <!-- Request ID -->
+        @if (ShowRequestId)
+        {
+            <div class="error-id-block">
+                <span class="error-id-label">Request ID</span>
+                <code class="error-id-value">@RequestId</code>
+            </div>
+        }
+
+        <!-- Dev mode info -->
+        <div class="error-info-box">
+            <p class="error-info-heading">
+                <span class="bi bi-info-circle-fill me-2" style="color:#00F0FF;"></span>
+                Developer Information
+            </p>
+            <p class="error-info-text">
+                Switch to the <strong style="color:#F0F4FF;">Development</strong> environment for detailed stack traces.
+                Set <code class="inline-code">ASPNETCORE_ENVIRONMENT=Development</code> and restart.
+            </p>
+            <p class="error-info-text" style="color:#FF9966; margin-top:0.5rem;">
+                ⚠ Do not enable Development mode on a production deployment.
+            </p>
+        </div>
+
+        <!-- Actions -->
+        <div class="error-actions">
+            <a href="/" class="btn-neon btn-primary-action">
+                <span class="bi bi-grid-1x2-fill me-2"></span> Return to Dashboard
+            </a>
+            <a href="javascript:location.reload()" class="btn-neon btn-neon-cyan">
+                <span class="bi bi-arrow-clockwise me-2"></span> Retry
+            </a>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .error-page-wrap {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: calc(100vh - 8rem);
+        padding: 2rem 1rem;
+    }
+
+    .error-card {
+        max-width: 560px;
+        width: 100%;
+        padding: 3rem 2.5rem;
+        text-align: center;
+        border-top: 3px solid #FF3D57;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 30px rgba(255,61,87,0.15);
+        background: #1C2030;
+        border-radius: 16px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Red glow shimmer at top */
+    .error-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,61,87,0.5), transparent);
+    }
+
+    .error-icon-ring {
+        width: 80px; height: 80px;
+        border-radius: 50%;
+        background: rgba(255, 61, 87, 0.1);
+        border: 2px solid rgba(255, 61, 87, 0.35);
+        display: flex; align-items: center; justify-content: center;
+        margin: 0 auto;
+        animation: err-pulse 2.5s ease-in-out infinite;
+    }
+
+    .error-title {
+        font-family: 'Poppins', sans-serif;
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #F0F4FF !important;
+        margin-bottom: 0.5rem;
+    }
+
+    .error-subtitle {
+        color: #8A95B0 !important;
+        font-size: 0.9rem;
+        margin-bottom: 1.75rem;
+    }
+
+    .error-id-block {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        background: rgba(0,0,0,0.25);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        padding: 0.75rem 1.25rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        text-align: left;
+    }
+    .error-id-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: #8A95B0 !important;
+    }
+    .error-id-value {
+        font-size: 0.82rem;
+        color: #00F0FF !important;
+        background: transparent;
+        font-family: 'JetBrains Mono', monospace;
+        word-break: break-all;
+    }
+
+    .error-info-box {
+        background: rgba(0,0,0,0.2);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 10px;
+        padding: 1.25rem 1.5rem;
+        text-align: left;
+        margin-bottom: 2rem;
+    }
+    .error-info-heading {
+        font-family: 'Poppins', sans-serif;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #F0F4FF !important;
+        margin-bottom: 0.6rem;
+        letter-spacing: 0.3px;
+    }
+    .error-info-text {
+        font-size: 0.83rem;
+        color: #8A95B0 !important;
+        line-height: 1.6;
+        margin-bottom: 0;
+    }
+    .error-info-text strong { color: #F0F4FF !important; font-weight: 600; }
+    .inline-code {
+        font-size: 0.78rem;
+        color: #00F0FF !important;
+        background: rgba(0,240,255,0.08);
+        padding: 0.1rem 0.4rem;
+        border-radius: 4px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .error-actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+</style>
+
+@code {
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
 

@@ -2,194 +2,274 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject IHttpClientFactory ClientFactory
 
-<PageTitle>Worldplay AMS Dashboard</PageTitle>
+<PageTitle>Worldplay AMS — Dashboard</PageTitle>
 
-<div class="dashboard-container">
-    <header class="dashboard-header">
-        <h1>Worldplay AMS</h1>
-        <div class="status-indicator">
-            <span class="dot online"></span> System Online
+<div class="dashboard-wrap">
+
+    <!-- Page Header -->
+    <div class="page-header mb-5">
+        <div>
+            <h1 class="page-title">Control Center</h1>
+            <p class="page-subtitle">Real-time overview of arcade terminals and session activity</p>
         </div>
-    </header>
-
-    <main class="dashboard-grid">
-        <section class="card quick-actions">
-            <h2>Quick Actions</h2>
-            <button class="btn btn-primary btn-large" @onclick="SimulateRfidTap">
-                <i class="icon-tap"></i> Simulate RFID Tap
+        <div class="header-actions">
+            <button class="btn-neon btn-neon-cyan" @onclick="LoadSessions">
+                <span class="bi bi-arrow-repeat"></span> Refresh
             </button>
+        </div>
+    </div>
+
+    <!-- KPI Stats Row -->
+    <div class="kpi-row mb-5">
+        <div class="stat-card accent-green">
+            <div class="stat-icon" style="background:rgba(0,230,118,0.12); color:var(--status-active);">
+                <span class="bi bi-display"></span>
+            </div>
+            <div>
+                <div class="stat-value">@activeSessions.Count</div>
+                <div class="stat-label">Active Sessions</div>
+            </div>
+        </div>
+        <div class="stat-card accent-cyan">
+            <div class="stat-icon" style="background:rgba(0,240,255,0.1); color:var(--neon-cyan);">
+                <span class="bi bi-people-fill"></span>
+            </div>
+            <div>
+                <div class="stat-value">@activeSessions.Count</div>
+                <div class="stat-label">Players Online</div>
+            </div>
+        </div>
+        <div class="stat-card accent-amber">
+            <div class="stat-icon" style="background:rgba(255,184,0,0.1); color:var(--neon-amber);">
+                <span class="bi bi-clock-history"></span>
+            </div>
+            <div>
+                <div class="stat-value">@machineCount</div>
+                <div class="stat-label">Total Machines</div>
+            </div>
+        </div>
+        <div class="stat-card accent-purple">
+            <div class="stat-icon" style="background:rgba(157,0,255,0.1); color:var(--neon-purple);">
+                <span class="bi bi-lightning-charge-fill"></span>
+            </div>
+            <div>
+                <div class="stat-value">₹@todayRevenue.ToString("F2")</div>
+                <div class="stat-label">Today's Revenue</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="dashboard-grid">
+
+        <!-- Quick Actions Panel -->
+        <section class="glass-card quick-actions-panel" style="border-top: 3px solid var(--neon-cyan);">
+            <p class="section-title"><span class="bi bi-lightning-fill text-cyan"></span> Quick Actions</p>
+
+            <button class="btn-neon btn-primary-action w-100 quick-action-btn mb-3" @onclick="SimulateRfidTap">
+                <span class="bi bi-upc-scan fs-5"></span>
+                <span>
+                    <span class="d-block" style="font-size:1rem;">Force Network Ping</span>
+                    <span class="d-block" style="font-size:0.72rem; opacity:0.75; font-weight:400;">Simulate RFID tap event</span>
+                </span>
+            </button>
+
+            <a href="/scanner" class="btn-neon btn-neon-cyan w-100 quick-action-btn mb-3">
+                <span class="bi bi-radar fs-5"></span>
+                <span>
+                    <span class="d-block" style="font-size:1rem;">Open Scanner</span>
+                    <span class="d-block" style="font-size:0.72rem; opacity:0.75; font-weight:400;">RFID check-in terminal</span>
+                </span>
+            </a>
+
+            <a href="/technician" class="btn-neon btn-neon-purple w-100 quick-action-btn">
+                <span class="bi bi-gpu-card fs-5"></span>
+                <span>
+                    <span class="d-block" style="font-size:1rem;">Diagnostics Panel</span>
+                    <span class="d-block" style="font-size:0.72rem; opacity:0.75; font-weight:400;">Manage machine states</span>
+                </span>
+            </a>
         </section>
 
-        <section class="card active-sessions">
-            <h2>Active Sessions</h2>
+        <!-- Live Sessions Table -->
+        <section class="glass-card" style="border-top: 3px solid var(--neon-purple);">
+            <p class="section-title"><span class="bi bi-activity text-purple"></span> Live Sessions</p>
+
             @if (activeSessions == null)
             {
-                <p>Loading sessions...</p>
+                <div class="empty-state">
+                    <span class="bi bi-hourglass-split rotating" style="font-size:2rem; color:var(--text-secondary);"></span>
+                    <p class="mt-3">Establishing connection...</p>
+                </div>
             }
             else if (!activeSessions.Any())
             {
-                <p>No active sessions.</p>
+                <div class="empty-state">
+                    <span class="bi bi-hdd-network" style="font-size:2.5rem; color:var(--text-disabled);"></span>
+                    <p class="mt-3">No active sessions detected.</p>
+                    <span class="badge-neon idle mt-2">All Terminals Idle</span>
+                </div>
             }
             else
             {
-                <ul class="session-list">
-                    @foreach (var session in activeSessions)
-                    {
-                        <li>Session @session.Id.Substring(0, 8) - Machine @session.MachineId.Substring(0, 8)</li>
-                    }
-                </ul>
+                <div class="table-responsive">
+                    <table class="table-glass">
+                        <thead>
+                            <tr>
+                                <th>Session ID</th>
+                                <th>Tag ID</th>
+                                <th>Started</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in activeSessions)
+                            {
+                                <tr>
+                                    <td class="font-mono text-cyan fw-bold" style="font-size:0.82rem;">
+                                        #@session.Id.ToString().Substring(0, 8).ToUpper()
+                                    </td>
+                                    <td class="text-white fw-medium font-mono" style="font-size:0.82rem;">@session.RfidTagId.ToString().Substring(0, 8).ToUpper()</td>
+                                    <td class="text-muted-custom" style="font-size:0.82rem;">@session.StartTime.ToLocalTime().ToString("HH:mm")</td>
+                                    <td><span class="badge-neon active"><span class="bi bi-record-circle-fill"></span> Active</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
         </section>
-    </main>
+
+    </div>
 </div>
 
 <style>
-    :root {
-        --primary-color: #4CAF50;
-        --bg-color: #f4f7f6;
-        --card-bg: #ffffff;
-        --text-main: #333333;
-    }
-
-    body {
-        margin: 0;
-        background-color: var(--bg-color);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    .dashboard-container {
-        padding: 2rem;
-        max-width: 1200px;
-        margin: auto;
-    }
-
-    .dashboard-header {
+    .page-header {
         display: flex;
+        align-items: flex-end;
         justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
+        gap: 1rem;
+        flex-wrap: wrap;
     }
-
-    .dashboard-header h1 {
-        font-weight: 700;
-        color: var(--text-main);
-        font-size: 2.5rem;
+    .page-title {
+        font-size: 1.9rem;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        background: linear-gradient(135deg, #fff 40%, var(--neon-cyan) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0;
     }
+    .page-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.3rem; }
 
-    .status-indicator {
-        font-size: 1.2rem;
-        display: flex;
-        align-items: center;
-        color: #555;
+    .kpi-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.25rem;
     }
-
-    .dot {
-        height: 15px;
-        width: 15px;
-        background-color: #ccc;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 8px;
-    }
-
-    .dot.online { background-color: var(--primary-color); }
 
     .dashboard-grid {
         display: grid;
-        grid-template-columns: 1fr 2fr;
-        gap: 2rem;
-        /* iPad landscape layout optimization */
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    @@media (min-width: 900px) {
+        .dashboard-grid { grid-template-columns: 300px 1fr; }
     }
 
-    .card {
-        background: var(--card-bg);
-        border-radius: 16px;
-        padding: 2rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    .quick-action-btn {
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+        justify-content: flex-start;
+        gap: 1rem;
+        text-align: left;
+        height: auto;
     }
 
-    .card h2 {
-        margin-top: 0;
-        margin-bottom: 1.5rem;
-        font-size: 1.5rem;
-        border-bottom: 2px solid #eee;
-        padding-bottom: 0.5rem;
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 220px;
+        color: var(--text-secondary);
+        text-align: center;
     }
 
-    .btn {
-        width: 100%;
-        padding: 1.5rem;
-        font-size: 1.4rem;
-        font-weight: bold;
-        border: none;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: transform 0.1s;
-    }
-
-    .btn:active {
-        transform: scale(0.98);
-    }
-
-    .btn-primary {
-        background-color: var(--primary-color);
-        color: white;
-        box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
-    }
-
-    .session-list {
-        list-style: none;
-        padding: 0;
-    }
-
-    .session-list li {
-        padding: 1rem;
-        background: #fafafa;
-        margin-bottom: 0.5rem;
-        border-radius: 8px;
-        font-family: monospace;
-        font-size: 1.1rem;
-    }
+    .fw-medium { font-weight: 500; }
 </style>
 
 @code {
-    private List<dynamic> activeSessions = new();
+    private List<SessionDto> activeSessions = new();
     private HttpClient httpClient = default!;
-    
+    private int machineCount = 0;
+    private decimal todayRevenue = 0;
+
     protected override async Task OnInitializedAsync()
     {
         httpClient = ClientFactory.CreateClient("ApiClient");
-        await LoadSessions();
+        await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue());
     }
 
     private async Task LoadSessions()
     {
-        await Task.CompletedTask; // Suppress CS1998 warning since API call is mocked
         try
         {
-            // In a real environment, un-mock this.
-            // activeSessions = await httpClient.GetFromJsonAsync<List<dynamic>>("/api/sessions/active") ?? new();
-            
-            // Mock data simulating fast response
-            activeSessions = new List<dynamic>
-            {
-                new { Id = Guid.NewGuid().ToString(), MachineId = Guid.NewGuid().ToString() },
-                new { Id = Guid.NewGuid().ToString(), MachineId = Guid.NewGuid().ToString() }
-            };
+            var result = await httpClient.GetFromJsonAsync<List<SessionDto>>("/api/sessions/active");
+            activeSessions = result ?? new();
         }
         catch
         {
-            // Fallback logic
+            activeSessions = new();
         }
     }
 
-    private void SimulateRfidTap()
+    private async Task LoadMachineCount()
     {
-        // Add fake optimistic result for lightning speed (< 3s rule)
-        var fakeSession = new { Id = Guid.NewGuid().ToString(), MachineId = "SIM-MACH-01" };
-        activeSessions.Insert(0, fakeSession);
-        
-        // Next, call API in background:
-        // await httpClient.PostAsJsonAsync("/api/sessions/start", new { TagUid = "MOCK_TAG", MachineId = Guid.NewGuid() });
+        try
+        {
+            var machines = await httpClient.GetFromJsonAsync<List<object>>("/api/machines");
+            machineCount = machines?.Count ?? 0;
+        }
+        catch
+        {
+            machineCount = 0;
+        }
+    }
+
+    private async Task LoadTodayRevenue()
+    {
+        try
+        {
+            todayRevenue = await httpClient.GetFromJsonAsync<decimal>("/api/sessions/revenue/today");
+        }
+        catch
+        {
+            todayRevenue = 0;
+        }
+    }
+
+    private async Task SimulateRfidTap()
+    {
+        try
+        {
+            await httpClient.PostAsJsonAsync("/api/sessions/process-tap", new { TagString = "DEMO-TAG-001" });
+            await LoadSessions();
+        }
+        catch
+        {
+            activeSessions.Insert(0, new SessionDto { Id = Guid.NewGuid(), RfidTagId = Guid.NewGuid(), StartTime = DateTime.Now, Status = "Active" });
+        }
+    }
+
+    private class SessionDto
+    {
+        public Guid Id { get; set; }
+        public Guid RfidTagId { get; set; }
+        public DateTime StartTime { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public int? TotalDurationMinutes { get; set; }
+        public decimal? Fee { get; set; }
     }
 }
