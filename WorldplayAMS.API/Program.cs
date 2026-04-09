@@ -60,7 +60,8 @@ app.MapPost("/api/sessions/start", async (StartSessionDto request, IGameSessionS
 app.MapGet("/api/sessions/active", async (SessionManagerService sessionService) =>
 {
     var sessions = await sessionService.GetActiveSessionsAsync();
-    return Results.Ok(sessions);
+    var dtos = sessions.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes, s.Fee });
+    return Results.Ok(dtos);
 })
 .WithName("GetActiveSessions")
 .WithOpenApi();
@@ -69,7 +70,7 @@ app.MapGet("/api/rfid/{tagUid}", async (string tagUid, IRfidReaderService rfidSe
 {
     var tag = await rfidService.ValidateTagAsync(tagUid);
     if (tag == null) return Results.NotFound();
-    return Results.Ok(tag);
+    return Results.Ok(new { tag.Id, tag.TagString, tag.UserId, tag.Status });
 })
 .WithName("ValidateTag")
 .WithOpenApi();
@@ -93,7 +94,8 @@ app.MapPost("/api/machines/toggle", async (ToggleMachineDto request, MachineMoni
 app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
 {
     var result = await machineService.GetAllMachinesAsync();
-    return Results.Ok(result);
+    var dtos = result.Select(m => new { m.Id, m.Name, m.MachineType, m.Status });
+    return Results.Ok(dtos);
 })
 .WithName("GetMachines")
 .WithOpenApi();
@@ -101,7 +103,8 @@ app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
 app.MapGet("/api/sessions/history", async (SessionManagerService sessionService) =>
 {
     var result = await sessionService.GetCompletedSessionsAsync();
-    return Results.Ok(result);
+    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes, s.Fee });
+    return Results.Ok(dtos);
 })
 .WithName("GetSessionHistory")
 .WithOpenApi();
@@ -117,10 +120,44 @@ app.MapGet("/api/sessions/revenue/today", async (SessionManagerService sessionSe
 app.MapGet("/api/machines/logs", async (MachineMonitoringService machineService) =>
 {
     var result = await machineService.GetUsageLogsAsync();
-    return Results.Ok(result);
+    var dtos = result.Select(m => new { m.Id, m.MachineId, m.StartTime, m.EndTime, m.Status });
+    return Results.Ok(dtos);
 })
 .WithName("GetMachineUsageLogs")
 .WithOpenApi();
+
+app.MapPost("/api/seed", async (Supabase.Client client) =>
+{
+    var logs = new List<string>();
+    try
+    {
+        var tag = new WorldplayAMS.Core.Models.RfidTag
+        {
+            Id = Guid.NewGuid(),
+            TagString = "DEMO-TAG-001",
+            UserId = null,
+            Status = "Active"
+        };
+        await client.From<WorldplayAMS.Core.Models.RfidTag>().Insert(tag);
+        logs.Add("RFID tag seeded successfully.");
+    } catch (Exception ex) { logs.Add("RFID Error: " + ex.Message); }
+
+    try
+    {
+        var machineId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var machine = new WorldplayAMS.Core.Models.ArcadeMachine
+        {
+            Id = machineId,
+            Name = "Cyber Racer Terminal",
+            MachineType = "Racing",
+            Status = "Online"
+        };
+        await client.From<WorldplayAMS.Core.Models.ArcadeMachine>().Insert(machine);
+        logs.Add("Arcade machine seeded successfully.");
+    } catch (Exception ex) { logs.Add("Machine Error: " + ex.Message); }
+
+    return Results.Ok(logs);
+});
 
 app.Run();
 
