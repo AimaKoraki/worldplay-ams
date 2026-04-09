@@ -414,12 +414,12 @@
             displayMessage = "Session completed — see billing below";
             try
             {
-                // Parse "Success: Checked out. Duration: X min | Fee: $Y.YY"
+                // Parse "Success: Checked out. Duration: X min | Fee: LKR Y.YY"
                 var durationStart = message.IndexOf("Duration:") + 9;
                 var durationEnd = message.IndexOf("min");
                 checkoutDuration = message.Substring(durationStart, durationEnd - durationStart).Trim();
 
-                var feeStart = message.IndexOf("$") + 1;
+                var feeStart = message.IndexOf("LKR ") + 4;
                 checkoutFee = message.Substring(feeStart).Trim();
             }
             catch
