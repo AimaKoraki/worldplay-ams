@@ -2,149 +2,394 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Staff")]
 @inject IHttpClientFactory ClientFactory
 
-<PageTitle>Worldplay AMS - RFID Scanner</PageTitle>
+<PageTitle>Worldplay AMS — Check-In Scanner</PageTitle>
 
-<div class="scanner-container" @onclick="FocusInput">
-    <div class="scanner-card">
-        <div class="icon-pulse">
-            <i class="rfid-icon">RFID</i>
-        </div>
-        <h1>Tap RFID to Check-in/Out</h1>
-        <p class="subtitle">Please hold your wristband near the reader.</p>
-        
-        @if (!string.IsNullOrEmpty(statusMessage))
-        {
-            <div class="status-banner @(isError ? "error" : "success")">
-                @statusMessage
+<div class="scanner-wrap" @onclick="FocusInput">
+
+    <div class="scanner-layout">
+
+        <!-- Left: Scanner terminal -->
+        <div class="scanner-terminal glass-card">
+            <!-- Top bar with corner label -->
+            <div class="terminal-topbar">
+                <span class="terminal-badge">RFID TERMINAL</span>
+                <span class="bi bi-wifi @(string.IsNullOrEmpty(statusMessage) ? "text-cyan" : (isError ? "text-error" : "text-green"))"></span>
             </div>
-        }
-    </div>
 
-    <!-- Hidden input to capture the USB RFID wedge reader input -->
-    <!-- Actively binds to keystrokes ending with 'Enter' -->
-    <input type="text" 
-           class="hidden-input" 
-           @bind="scannedTag" 
-           @bind:event="oninput"
-           @onkeyup="HandleKeyUp" 
-           @ref="rfidInputRef" 
-           autofocus />
+            <!-- Scan icon -->
+            <div class="scan-ring-wrap">
+                <div class="scan-ring @(string.IsNullOrEmpty(statusMessage) ? "" : (isError ? "ring-error" : "ring-success"))">
+                    <span class="bi @(string.IsNullOrEmpty(statusMessage) ? "bi-upc-scan" : (isError ? "bi-x-lg" : "bi-check-lg"))
+                                  scan-icon @(string.IsNullOrEmpty(statusMessage) ? "text-cyan" : (isError ? "text-error" : "text-green"))"></span>
+                </div>
+                <!-- Orbital rings -->
+                <div class="orbit orbit-1"></div>
+                <div class="orbit orbit-2"></div>
+            </div>
+
+            <!-- Heading -->
+            <div class="scanner-copy">
+                @if (string.IsNullOrEmpty(statusMessage))
+                {
+                    <h1 class="scanner-title">Awaiting Scan</h1>
+                    <p class="scanner-desc">Tap or swipe RFID wristband near reader</p>
+                }
+                else if (isError)
+                {
+                    <h1 class="scanner-title text-error">Scan Failed</h1>
+                    <p class="scanner-desc">@statusMessage</p>
+                }
+                else
+                {
+                    <h1 class="scanner-title text-green">Access Granted</h1>
+                    <p class="scanner-desc">@statusMessage</p>
+                }
+            </div>
+
+            <!-- Status banner -->
+            @if (!string.IsNullOrEmpty(statusMessage))
+            {
+                <div class="status-result @(isError ? "result-error" : "result-success")">
+                    <span class="bi @(isError ? "bi-x-circle-fill" : "bi-check-circle-fill") me-2"></span>
+                    @displayMessage
+                </div>
+
+                @if (isCheckout && !isError)
+                {
+                    <div class="billing-card">
+                        <div class="billing-row">
+                            <div class="billing-item">
+                                <span class="bi bi-clock-fill" style="color:var(--neon-amber);"></span>
+                                <div>
+                                    <span class="billing-label">Duration</span>
+                                    <span class="billing-value">@checkoutDuration min</span>
+                                </div>
+                            </div>
+                            <div class="billing-divider"></div>
+                            <div class="billing-item">
+                                <span class="bi bi-cash-stack" style="color:var(--status-active);"></span>
+                                <div>
+                                    <span class="billing-label">Amount Due</span>
+                                    <span class="billing-value billing-fee">$@checkoutFee</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="status-idle-placeholder">
+                    <span></span><span></span><span></span>
+                </div>
+            }
+
+            <!-- Hidden RFID input -->
+            <input type="text"
+                   class="hidden-rfid-input"
+                   @bind="scannedTag"
+                   @bind:event="oninput"
+                   @onkeyup="HandleKeyUp"
+                   @ref="rfidInputRef"
+                   autofocus />
+        </div>
+
+        <!-- Right: Info / instructions panel -->
+        <div class="scanner-info-panel">
+            <div class="glass-card info-card mb-3">
+                <p class="section-title"><span class="bi bi-info-circle text-cyan"></span> How It Works</p>
+                <ul class="info-steps">
+                    <li>
+                        <div class="step-num">1</div>
+                        <span>Player taps RFID wristband on reader</span>
+                    </li>
+                    <li>
+                        <div class="step-num">2</div>
+                        <span>System validates tag against database</span>
+                    </li>
+                    <li>
+                        <div class="step-num">3</div>
+                        <span>Session starts or ends automatically</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="glass-card info-card">
+                <p class="section-title"><span class="bi bi-bookmark-check text-cyan"></span> Status Codes</p>
+                <div class="code-list">
+                    <div class="code-row">
+                        <span class="badge-neon active"><span class="bi bi-record-circle-fill"></span> Active</span>
+                        <span>Session started</span>
+                    </div>
+                    <div class="code-row">
+                        <span class="badge-neon idle">Idle</span>
+                        <span>Session ended</span>
+                    </div>
+                    <div class="code-row">
+                        <span class="badge-neon error"><span class="bi bi-x-circle-fill"></span> Error</span>
+                        <span>Tag unknown / API fault</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
 </div>
 
 <style>
-    :root {
-        --primary-bg: #1e1e2f;
-        --card-bg: #2a2a40;
-        --text-color: #ffffff;
-        --success-color: #4cd137;
-        --error-color: #e84118;
-    }
-
-    body {
-        margin: 0;
-        background-color: var(--primary-bg);
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-
-    .scanner-container {
+    .scanner-wrap {
         display: flex;
-        justify-content: center;
+        align-items: flex-start;
+        min-height: calc(100vh - 6rem);
+        cursor: default;
+    }
+
+    .scanner-layout {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        width: 100%;
+        align-items: start;
+    }
+    @@media (min-width: 880px) {
+        .scanner-layout { grid-template-columns: 1fr 340px; align-items: center; }
+        .scanner-wrap { align-items: center; }
+    }
+
+    /* Terminal card */
+    .scanner-terminal {
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        height: 100vh;
-        width: 100vw;
+        padding: 0;
+        overflow: hidden;
+        border-color: rgba(0,240,255,0.15);
+        box-shadow: var(--shadow-card), var(--shadow-glow-cyan);
     }
 
-    .scanner-card {
-        background-color: var(--card-bg);
-        padding: 4rem;
-        border-radius: 24px;
-        text-align: center;
-        color: var(--text-color);
-        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        max-width: 600px;
-        width: 90%;
+    .terminal-topbar {
+        width: 100%;
+        background: rgba(0,0,0,0.3);
+        padding: 0.75rem 1.5rem;
+        border-bottom: 1px solid rgba(0,240,255,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .terminal-badge {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 2px;
+        color: var(--neon-cyan);
+        text-transform: uppercase;
     }
 
-    .scanner-card h1 {
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
+    /* Scan ring */
+    .scan-ring-wrap {
+        position: relative;
+        width: 180px; height: 180px;
+        display: flex; align-items: center; justify-content: center;
+        margin: 3rem auto 1.5rem;
     }
 
-    .subtitle {
-        font-size: 1.2rem;
-        color: #a4b0be;
-        margin-bottom: 2rem;
-    }
-
-    .icon-pulse {
-        width: 120px;
-        height: 120px;
-        background: rgba(76, 209, 55, 0.2);
+    .scan-ring {
+        width: 140px; height: 140px;
         border-radius: 50%;
+        background: rgba(0,240,255,0.04);
+        border: 2px solid rgba(0,240,255,0.25);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 3rem;
+        position: relative;
+        z-index: 2;
+        transition: background 0.4s, border-color 0.4s, box-shadow 0.4s;
+        animation: scan-breathe 3s ease-in-out infinite;
+    }
+    .scan-ring.ring-success {
+        background: rgba(0,230,118,0.08);
+        border-color: var(--status-active);
+        box-shadow: 0 0 30px rgba(0,230,118,0.2);
+        animation: none;
+    }
+    .scan-ring.ring-error {
+        background: rgba(255,61,87,0.08);
+        border-color: var(--status-error);
+        box-shadow: 0 0 30px rgba(255,61,87,0.2);
+        animation: none;
+    }
+
+    .scan-icon {
+        transition: color 0.3s;
+    }
+
+    /* Orbits */
+    .orbit {
+        position: absolute;
+        border-radius: 50%;
+        border: 1px dashed rgba(0,240,255,0.12);
+        pointer-events: none;
+    }
+    .orbit-1 { width: 160px; height: 160px; animation: orbit-spin 8s linear infinite; }
+    .orbit-2 { width: 180px; height: 180px; animation: orbit-spin 12s linear infinite reverse; }
+
+
+    /* Copy */
+    .scanner-copy { text-align: center; padding: 0 2rem; }
+    .scanner-title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        color: var(--text-primary);
+        margin-bottom: 0.4rem;
+        transition: color 0.3s;
+    }
+    .scanner-desc { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+    /* Status result */
+    .status-result {
+        width: calc(100% - 3rem);
+        margin: 0 1.5rem 2rem;
+        padding: 1rem 1.25rem;
+        border-radius: 10px;
+        font-family: var(--font-heading);
+        font-weight: 600;
+        font-size: 0.9rem;
         display: flex;
         align-items: center;
-        justify-content: center;
-        margin: 0 auto 2rem auto;
-        animation: pulse 2s infinite;
+        animation: slideUp 0.3s ease-out;
+    }
+    .result-success {
+        background: rgba(0,230,118,0.08);
+        color: var(--status-active);
+        border: 1px solid rgba(0,230,118,0.3);
+        box-shadow: 0 0 20px rgba(0,230,118,0.1);
+    }
+    .result-error {
+        background: rgba(255,61,87,0.08);
+        color: var(--status-error);
+        border: 1px solid rgba(255,61,87,0.3);
+        box-shadow: 0 0 20px rgba(255,61,87,0.1);
     }
 
-    .icon-pulse .rfid-icon {
-        font-size: 2rem;
-        font-weight: bold;
-        color: var(--success-color);
+    .status-idle-placeholder {
+        display: flex; gap: 6px; align-items: center; justify-content: center;
+        margin-bottom: 2.5rem;
+        height: 3.25rem;
     }
-
-    @@keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(76, 209, 55, 0.4); }
-        70% { box-shadow: 0 0 0 30px rgba(76, 209, 55, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(76, 209, 55, 0); }
+    .status-idle-placeholder span {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--surface-border-strong);
+        animation: dot-pulse 1.4s ease-in-out infinite;
     }
+    .status-idle-placeholder span:nth-child(2) { animation-delay: 0.2s; }
+    .status-idle-placeholder span:nth-child(3) { animation-delay: 0.4s; }
 
-    .hidden-input {
+
+    /* Hidden input */
+    .hidden-rfid-input {
         position: absolute;
         opacity: 0;
-        top: -1000px; /* Keep it off-screen */
+        pointer-events: none;
+        top: -999px;
+        left: -999px;
+        width: 1px; height: 1px;
     }
 
-    .status-banner {
-        padding: 1.5rem;
+    /* Info panel */
+    .scanner-info-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+    .info-steps {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .info-steps li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    .step-num {
+        width: 24px; height: 24px;
+        background: rgba(0,240,255,0.1);
+        border: 1px solid rgba(0,240,255,0.25);
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-family: var(--font-heading);
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--neon-cyan);
+        flex-shrink: 0;
+    }
+
+    .code-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .code-row {
+        display: flex; align-items: center; gap: 0.85rem;
+        font-size: 0.82rem; color: var(--text-secondary);
+    }
+
+    /* Billing card */
+    .billing-card {
+        width: calc(100% - 3rem);
+        margin: 0 1.5rem 2rem;
+        padding: 1.25rem;
         border-radius: 12px;
-        font-size: 1.5rem;
-        font-weight: 600;
-        margin-top: 2rem;
-        animation: fadeIn 0.3s ease-out;
+        background: rgba(0,230,118,0.04);
+        border: 1px solid rgba(0,230,118,0.2);
+        animation: slideUp 0.35s ease-out;
     }
-
-    .status-banner.success {
-        background-color: rgba(76, 209, 55, 0.2);
-        color: var(--success-color);
-        border: 2px solid var(--success-color);
+    .billing-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
     }
-
-    .status-banner.error {
-        background-color: rgba(232, 65, 24, 0.2);
-        color: var(--error-color);
-        border: 2px solid var(--error-color);
+    .billing-item {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
     }
-
-    @@keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+    .billing-item > div { display: flex; flex-direction: column; }
+    .billing-label {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-disabled);
+    }
+    .billing-value {
+        font-family: var(--font-heading);
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    .billing-fee {
+        color: var(--status-active);
+        text-shadow: 0 0 12px rgba(0,230,118,0.4);
+    }
+    .billing-divider {
+        width: 1px;
+        height: 40px;
+        background: var(--surface-border-strong);
     }
 </style>
 
 @code {
     private string scannedTag = string.Empty;
     private string statusMessage = string.Empty;
+    private string displayMessage = string.Empty;
     private bool isError = false;
+    private bool isCheckout = false;
+    private string checkoutDuration = "";
+    private string checkoutFee = "";
     private ElementReference rfidInputRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-        {
-            await FocusInput();
-        }
+        if (firstRender) await FocusInput();
     }
 
     private async Task FocusInput()
@@ -154,14 +399,40 @@
 
     private async Task HandleKeyUp(KeyboardEventArgs e)
     {
-        // Standard USB readers act as a keyboard and emit "Enter" at the end of the scan
-        if (e.Key == "Enter")
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(scannedTag))
         {
-            if (!string.IsNullOrWhiteSpace(scannedTag))
+            await ProcessTap(scannedTag);
+            scannedTag = string.Empty;
+        }
+    }
+
+    private void ParseCheckoutResponse(string message)
+    {
+        isCheckout = message.Contains("Duration") && message.Contains("Fee");
+        if (isCheckout)
+        {
+            displayMessage = "Session completed — see billing below";
+            try
             {
-                await ProcessTap(scannedTag);
+                // Parse "Success: Checked out. Duration: X min | Fee: $Y.YY"
+                var durationStart = message.IndexOf("Duration:") + 9;
+                var durationEnd = message.IndexOf("min");
+                checkoutDuration = message.Substring(durationStart, durationEnd - durationStart).Trim();
+
+                var feeStart = message.IndexOf("$") + 1;
+                checkoutFee = message.Substring(feeStart).Trim();
             }
-            scannedTag = string.Empty; // Reset string for the next scan
+            catch
+            {
+                checkoutDuration = "—";
+                checkoutFee = "—";
+            }
+        }
+        else
+        {
+            displayMessage = message;
+            checkoutDuration = "";
+            checkoutFee = "";
         }
     }
 
@@ -170,27 +441,29 @@
         var client = ClientFactory.CreateClient("ApiClient");
         try
         {
-            // Call API backend which leverages SessionManagerService.ProcessRfidTapAsync
             var response = await client.PostAsJsonAsync("/api/sessions/process-tap", new { TagString = tagStr });
             var resultMessage = await response.Content.ReadAsStringAsync();
-
             isError = resultMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
             statusMessage = resultMessage.Trim('"');
+            ParseCheckoutResponse(statusMessage);
         }
-        catch (Exception)
+        catch
         {
-            // Trigger optimistic fallback UI indicating offline log
             isError = true;
-            statusMessage = "Offline: Tap recorded locally. Will sync when online.";
+            isCheckout = false;
+            statusMessage = "Network / DB unreachable — fallback to local cache.";
+            displayMessage = statusMessage;
         }
 
         StateHasChanged();
-        
-        // Auto-clear message after 3 seconds to get ready for the next guest
+
+        // Give more time for checkout billing info (6s vs 3.5s)
+        var delay = isCheckout ? 6000 : 3500;
         _ = Task.Run(async () =>
         {
-            await Task.Delay(3000);
+            await Task.Delay(delay);
             statusMessage = string.Empty;
+            isCheckout = false;
             await InvokeAsync(StateHasChanged);
         });
     }

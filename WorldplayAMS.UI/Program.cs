@@ -9,9 +9,18 @@ builder.Services.AddRazorComponents()
 // Add HttpClient for communicating with WorldplayAMS.API
 builder.Services.AddHttpClient("ApiClient", client =>
 {
-    client.BaseAddress = new Uri("https://localhost:5001");
+    client.BaseAddress = new Uri("http://localhost:5089");
 });
 
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = "BlazorServer";
+    options.DefaultChallengeScheme = "BlazorServer";
+}).AddCookie("BlazorServer", options =>
+{
+    options.LoginPath = "/login";
+    options.AccessDeniedPath = "/access-denied";
+});
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider, WorldplayAMS.UI.Auth.SimulatedAuthStateProvider>();
@@ -28,6 +37,8 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()

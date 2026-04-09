@@ -34,7 +34,7 @@ public class GameSessionService : IGameSessionService
         {
             // Resolve RfidTagId
             var tagResponse = await _supabase.From<RfidTag>()
-                                .Where(t => t.TagUid == tagUid && t.IsActive)
+                                .Where(t => t.TagString == tagUid && t.Status == "Active")
                                 .Single();
             
             if (tagResponse == null) 
