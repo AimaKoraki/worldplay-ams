@@ -1,0 +1,6 @@
+@WorldplayAMS.API_HostAddress = http://localhost:5089
+
+GET {{WorldplayAMS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
