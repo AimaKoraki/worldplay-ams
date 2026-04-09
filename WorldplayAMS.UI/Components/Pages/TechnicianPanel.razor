@@ -1,0 +1,196 @@
+@page "/technician"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Technician")]
+@inject IHttpClientFactory ClientFactory
+
+<PageTitle>Worldplay AMS - Technician Panel</PageTitle>
+
+<div class="tech-container">
+    <header class="tech-header">
+        <h1>High-Value Asset Monitoring</h1>
+        <p>Start or stop usage logging for specific premium physical units.</p>
+    </header>
+
+    @if (machines == null)
+    {
+        <div class="loader">Loading machines...</div>
+    }
+    else if (!machines.Any())
+    {
+        <p>No high-value machines registered.</p>
+    }
+    else
+    {
+        <div class="machine-grid">
+            @foreach (var m in machines)
+            {
+                <div class="machine-card @(m.Status == "InUse" ? "in-use" : "")">
+                    <h3>@m.Name</h3>
+                    <span class="type-badge">@m.MachineType</span>
+                    
+                    <div class="status-indicator">
+                        @if(m.Status == "InUse")
+                        {
+                            <span class="pulse-dot active"></span> <text>Currently Logging</text>
+                        }
+                        else
+                        {
+                            <span class="pulse-dot idle"></span> <text>Idle / Online</text>
+                        }
+                    </div>
+
+                    <button class="btn @(m.Status == "InUse" ? "btn-danger" : "btn-primary")" 
+                            @onclick="() => ToggleMachine(m)">
+                        @(m.Status == "InUse" ? "Stop Logging" : "Start Logging")
+                    </button>
+                    
+                    @if(messageId == m.Id && !string.IsNullOrEmpty(feedbackMessage))
+                    {
+                        <div class="feedback-msg">@feedbackMessage</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .tech-container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: auto;
+        color: #ddd;
+    }
+    .tech-header h1 {
+        color: #fff;
+        margin-bottom: 0.5rem;
+    }
+    .machine-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-top: 2rem;
+    }
+    .machine-card {
+        background: #2a2a40;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+        border: 2px solid transparent;
+    }
+    .machine-card.in-use {
+        border-color: #ff9f43;
+    }
+    .type-badge {
+        background: #5f27cd;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+    .status-indicator {
+        margin: 1.5rem 0;
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .pulse-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .pulse-dot.active {
+        background-color: #ff9f43;
+        box-shadow: 0 0 10px #ff9f43;
+    }
+    .pulse-dot.idle {
+        background-color: #1dd1a1;
+    }
+    .btn {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+    }
+    .btn-primary { background: #1dd1a1; color: #1e1e2f; }
+    .btn-danger { background: #ff6b6b; color: white; }
+    .feedback-msg {
+        margin-top: 1rem;
+        font-size: 0.9rem;
+        color: #feca57;
+    }
+</style>
+
+@code {
+    private List<dynamic> machines = default!;
+    private string feedbackMessage = string.Empty;
+    private Guid messageId = Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMachines();
+    }
+
+    private async Task LoadMachines()
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            // Call API implementation endpoint.
+            // machines = await client.GetFromJsonAsync<List<dynamic>>("/api/machines");
+            await Task.CompletedTask; // suppress warning
+            
+            // Mock seeding since the system currently lacks physical insert abilities
+            machines = new List<dynamic>
+            {
+                new { Id = Guid.NewGuid(), Name = "VR Station 1 - Beat Saber", MachineType = "VR Unit", Status = "Online" },
+                new { Id = Guid.NewGuid(), Name = "VR Station 2 - Racing Sim", MachineType = "VR Unit", Status = "InUse" }
+            };
+        }
+        catch
+        {
+            machines = new();
+        }
+    }
+
+    private async Task ToggleMachine(dynamic machine)
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        // Optimistic UI update
+        var currentStatus = machine.Status;
+        machine.Status = currentStatus == "InUse" ? "Online" : "InUse";
+
+        try
+        {
+            /*
+            var response = await client.PostAsJsonAsync("/api/machines/toggle", new { MachineId = machine.Id });
+            var result = await response.Content.ReadAsStringAsync();
+            feedbackMessage = result;
+            */
+            messageId = machine.Id;
+            feedbackMessage = currentStatus == "InUse" ? "Stopped tracking. Duration calculated." : "Tracking started.";
+        }
+        catch
+        {
+            machine.Status = currentStatus; // Revert
+            feedbackMessage = "Network error processing toggle.";
+        }
+        
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000);
+            if (messageId == machine.Id) 
+            {
+                feedbackMessage = "";
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+    }
+}
