@@ -62,7 +62,7 @@ public class SessionManagerService
 
                 // Update is performed directly on the mapped model with Postgrest
                 await _supabase.From<Session>().Update(session);
-                return $"Success: Checked out. Duration: {session.TotalDurationMinutes} min | Fee: ${session.Fee:F2}";
+                return $"Success: Checked out. Duration: {session.TotalDurationMinutes} min | Fee: LKR {session.Fee:F2}";
             }
         }
         catch (Exception ex)
