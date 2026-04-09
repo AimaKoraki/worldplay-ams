@@ -57,7 +57,7 @@ app.MapPost("/api/sessions/start", async (StartSessionDto request, IGameSessionS
 .WithName("StartSession")
 .WithOpenApi();
 
-app.MapGet("/api/sessions/active", async (IGameSessionService sessionService) =>
+app.MapGet("/api/sessions/active", async (SessionManagerService sessionService) =>
 {
     var sessions = await sessionService.GetActiveSessionsAsync();
     return Results.Ok(sessions);
@@ -98,6 +98,29 @@ app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
 .WithName("GetMachines")
 .WithOpenApi();
 
+app.MapGet("/api/sessions/history", async (SessionManagerService sessionService) =>
+{
+    var result = await sessionService.GetCompletedSessionsAsync();
+    return Results.Ok(result);
+})
+.WithName("GetSessionHistory")
+.WithOpenApi();
+
+app.MapGet("/api/sessions/revenue/today", async (SessionManagerService sessionService) =>
+{
+    var result = await sessionService.GetTodayRevenueAsync();
+    return Results.Ok(result);
+})
+.WithName("GetTodayRevenue")
+.WithOpenApi();
+
+app.MapGet("/api/machines/logs", async (MachineMonitoringService machineService) =>
+{
+    var result = await machineService.GetUsageLogsAsync();
+    return Results.Ok(result);
+})
+.WithName("GetMachineUsageLogs")
+.WithOpenApi();
 
 app.Run();
 

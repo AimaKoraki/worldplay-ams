@@ -2,50 +2,83 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">WorldplayAMS.UI</a>
-    </div>
+<div class="brand-header">
+    <a class="navbar-brand" href="">
+        <div class="brand-logo">
+            <span class="bi bi-controller"></span>
+        </div>
+        <div class="brand-name">
+            <span class="brand-main">Worldplay</span>
+            <span class="brand-sub">AMS &nbsp;v2.0</span>
+        </div>
+    </a>
 </div>
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
+    <nav>
         <AuthorizeView>
             <Authorized Context="authContext">
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                        <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+
+                <span class="nav-section-label">Navigation</span>
+
+                <div class="nav-item mb-1">
+                    <NavLink class="glass-nav-link" href="" Match="NavLinkMatch.All">
+                        <span class="bi bi-grid-1x2-fill nav-icon"></span>
+                        Dashboard
                     </NavLink>
                 </div>
 
                 <AuthorizeView Roles="Admin,Staff" Context="staffContext">
-                    <div class="nav-item px-3">
-                        <NavLink class="nav-link" href="scanner">
-                            <span class="bi bi-upc-scan-nav-menu" aria-hidden="true"></span> Scanner
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="scanner">
+                            <span class="bi bi-radar nav-icon"></span>
+                            Check-In Scanner
+                        </NavLink>
+                    </div>
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="sessions">
+                            <span class="bi bi-clock-history nav-icon"></span>
+                            Session History
                         </NavLink>
                     </div>
                 </AuthorizeView>
 
                 <AuthorizeView Roles="Admin,Technician" Context="techContext">
-                    <div class="nav-item px-3">
-                        <NavLink class="nav-link" href="technician">
-                            <span class="bi bi-tools-nav-menu" aria-hidden="true"></span> Technician
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="technician">
+                            <span class="bi bi-gpu-card nav-icon"></span>
+                            Diagnostics
+                        </NavLink>
+                    </div>
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="asset-logs">
+                            <span class="bi bi-hdd-stack-fill nav-icon"></span>
+                            Asset Logs
                         </NavLink>
                     </div>
                 </AuthorizeView>
 
-                <div class="nav-item px-3 mt-3">
-                    <button class="nav-link btn-logout" @onclick="Logout">
-                        <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Logout
+                <!-- Spacer pushes sign-out to the bottom -->
+                <div class="nav-bottom-spacer"></div>
+
+                <div class="nav-divider"></div>
+
+                <div class="nav-item mb-1">
+                    <button class="glass-nav-link btn-logout" @onclick="Logout">
+                        <span class="bi bi-box-arrow-left nav-icon"></span>
+                        Sign Out
                     </button>
                 </div>
+
             </Authorized>
-            <NotAuthorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="login">
-                        <span class="bi bi-person-circle-nav-menu" aria-hidden="true"></span> Login
+            <NotAuthorized Context="notAuthContext">
+                <span class="nav-section-label">Access</span>
+                <div class="nav-item mb-1">
+                    <NavLink class="glass-nav-link" href="login">
+                        <span class="bi bi-fingerprint nav-icon"></span>
+                        Authenticate
                     </NavLink>
                 </div>
             </NotAuthorized>
