@@ -22,11 +22,15 @@ var options = new SupabaseOptions
 builder.Services.AddSingleton(provider => new Supabase.Client(supabaseUrl, supabaseKey, options));
 
 // Local Services
+builder.Services.AddScoped<ISupabaseRepository, SupabaseRepository>();
 builder.Services.AddScoped<IFallbackCacheService, FallbackCacheService>();
 builder.Services.AddScoped<SessionManagerService>();
 builder.Services.AddScoped<MachineMonitoringService>();
-builder.Services.AddScoped<IGameSessionService, GameSessionService>();
+builder.Services.AddScoped<TransactionHistoryService>();
 builder.Services.AddScoped<IRfidReaderService, RfidReaderService>();
+
+// Background worker for retrying offline-cached RFID taps and machine toggles
+builder.Services.AddHostedService<BackgroundSyncService>();
 
 var app = builder.Build();
 
@@ -48,14 +52,7 @@ app.UseHttpsRedirection();
 
 // Minimal API Endpoints
 
-app.MapPost("/api/sessions/start", async (StartSessionDto request, IGameSessionService sessionService) =>
-{
-    var session = await sessionService.StartSessionAsync(request.TagUid, request.MachineId);
-    if (session == null) return Results.BadRequest("Invalid Tag or Machine");
-    return Results.Ok(session);
-})
-.WithName("StartSession")
-.WithOpenApi();
+
 
 app.MapGet("/api/sessions/active", async (SessionManagerService sessionService) =>
 {
@@ -77,7 +74,7 @@ app.MapGet("/api/rfid/{tagUid}", async (string tagUid, IRfidReaderService rfidSe
 
 app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionManagerService sessionService) =>
 {
-    var result = await sessionService.ProcessRfidTapAsync(request.TagString);
+    var result = await sessionService.ProcessRfidTapAsync(request.TagString, request.StaffName);
     return Results.Ok(result);
 })
 .WithName("ProcessTap")
@@ -103,7 +100,7 @@ app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
 app.MapGet("/api/sessions/history", async (SessionManagerService sessionService) =>
 {
     var result = await sessionService.GetCompletedSessionsAsync();
-    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes, s.Fee });
+    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.EndTime, s.Status, s.TotalDurationMinutes, s.Fee, s.CheckedOutByStaff });
     return Results.Ok(dtos);
 })
 .WithName("GetSessionHistory")
@@ -159,9 +156,48 @@ app.MapPost("/api/seed", async (Supabase.Client client) =>
     return Results.Ok(logs);
 });
 
+// DEV-13: Transaction History & Audit Endpoints
+
+app.MapGet("/api/transactions", async (DateTime? from, DateTime? to, TransactionHistoryService txnService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date;
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await txnService.GetTransactionsByDateRangeAsync(fromDate, toDate);
+    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.EndTime, s.Status, s.TotalDurationMinutes, s.Fee, s.CheckedOutByStaff });
+    return Results.Ok(dtos);
+})
+.WithName("GetTransactions")
+.WithOpenApi();
+
+app.MapGet("/api/transactions/summary", async (DateTime? date, TransactionHistoryService txnService) =>
+{
+    var targetDate = date ?? DateTime.UtcNow.Date;
+    var result = await txnService.GetDailyReconciliationSummaryAsync(targetDate);
+    return Results.Ok(result);
+})
+.WithName("GetTransactionSummary")
+.WithOpenApi();
+
+app.MapPost("/api/audit/log", async (AuditLogDto request, TransactionHistoryService txnService) =>
+{
+    await txnService.LogManagerActionAsync(request.ManagerName, request.Action, request.Details);
+    return Results.Ok("Audit log recorded.");
+})
+.WithName("PostAuditLog")
+.WithOpenApi();
+
+app.MapGet("/api/audit/logs", async (int? limit, TransactionHistoryService txnService) =>
+{
+    var result = await txnService.GetManagerAuditLogsAsync(limit ?? 50);
+    var dtos = result.Select(l => new { l.Id, l.ManagerName, l.Action, l.Details, l.Timestamp });
+    return Results.Ok(dtos);
+})
+.WithName("GetAuditLogs")
+.WithOpenApi();
+
 app.Run();
 
 // DTOs
-public record StartSessionDto(string TagUid, Guid MachineId);
-public record ProcessTapDto(string TagString);
+public record ProcessTapDto(string TagString, string? StaffName = null);
 public record ToggleMachineDto(Guid MachineId);
+public record AuditLogDto(string ManagerName, string Action, string? Details = null);

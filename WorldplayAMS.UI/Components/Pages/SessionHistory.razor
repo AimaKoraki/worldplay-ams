@@ -70,6 +70,7 @@
                             <th>Check-Out</th>
                             <th>Duration</th>
                             <th>Fee</th>
+                            <th>Staff</th>
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -94,6 +95,9 @@
                                 </td>
                                 <td>
                                     <span class="fee-value">$@((s.Fee ?? 0).ToString("F2"))</span>
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @(string.IsNullOrEmpty(s.CheckedOutByStaff) ? "—" : s.CheckedOutByStaff)
                                 </td>
                                 <td>
                                     <span class="badge-neon active"><span class="bi bi-check-circle-fill"></span> Completed</span>
@@ -204,5 +208,6 @@
         public string Status { get; set; } = string.Empty;
         public int? TotalDurationMinutes { get; set; }
         public decimal? Fee { get; set; }
+        public string? CheckedOutByStaff { get; set; }
     }
 }

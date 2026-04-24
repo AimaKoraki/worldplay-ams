@@ -1,6 +1,7 @@
 @page "/scanner"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Staff")]
 @inject IHttpClientFactory ClientFactory
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Worldplay AMS — Check-In Scanner</PageTitle>
 
@@ -70,7 +71,7 @@
                                 <span class="bi bi-cash-stack" style="color:var(--status-active);"></span>
                                 <div>
                                     <span class="billing-label">Amount Due</span>
-                                    <span class="billing-value billing-fee">$@checkoutFee</span>
+                                    <span class="billing-value billing-fee">LKR @checkoutFee</span>
                                 </div>
                             </div>
                         </div>
@@ -385,11 +386,17 @@
     private bool isCheckout = false;
     private string checkoutDuration = "";
     private string checkoutFee = "";
+    private string staffName = "Unknown";
     private ElementReference rfidInputRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await FocusInput();
+        if (firstRender)
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            staffName = authState.User?.Identity?.Name ?? "Unknown";
+            await FocusInput();
+        }
     }
 
     private async Task FocusInput()
@@ -441,7 +448,7 @@
         var client = ClientFactory.CreateClient("ApiClient");
         try
         {
-            var response = await client.PostAsJsonAsync("/api/sessions/process-tap", new { TagString = tagStr });
+            var response = await client.PostAsJsonAsync("/api/sessions/process-tap", new { TagString = tagStr, StaffName = staffName });
             var resultMessage = await response.Content.ReadAsStringAsync();
             isError = resultMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
             statusMessage = resultMessage.Trim('"');
