@@ -1,0 +1,762 @@
+@page "/transactions"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject IHttpClientFactory ClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>Worldplay AMS — Transaction History</PageTitle>
+
+<div class="txn-wrap">
+
+    <!-- Page Header -->
+    <div class="txn-header">
+        <div>
+            <h1 class="txn-title">
+                <span class="bi bi-receipt-cutoff me-3" style="color:var(--neon-amber);"></span>Transaction History
+            </h1>
+            <p class="txn-subtitle">Daily reconciliation &amp; manager audit trail</p>
+        </div>
+        <div class="header-actions-row">
+            <button id="btn-export-csv" class="btn-neon btn-neon-green" @onclick="ExportCsv" disabled="@(!transactions.Any())">
+                <span class="bi bi-download"></span> Export CSV
+            </button>
+            <button id="btn-toggle-audit" class="btn-neon btn-neon-purple" @onclick="ToggleAuditPanel">
+                <span class="bi bi-shield-lock"></span> Audit Trail
+            </button>
+            <button id="btn-refresh" class="btn-neon btn-neon-cyan" @onclick="RefreshAll">
+                <span class="bi bi-arrow-repeat"></span> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Date & Filter Controls -->
+    <div class="filter-bar glass-card" style="padding:1rem 1.5rem;">
+        <div class="filter-group">
+            <label class="filter-label">From</label>
+            <input id="input-date-from" type="date" class="form-input filter-date" @bind="dateFrom" />
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">To</label>
+            <input id="input-date-to" type="date" class="form-input filter-date" @bind="dateTo" />
+        </div>
+        <div class="filter-quick-btns">
+            <button class="btn-neon btn-quick @QuickBtnClass("today")" @onclick="QuickToday">Today</button>
+            <button class="btn-neon btn-quick @QuickBtnClass("week")" @onclick="QuickWeek">This Week</button>
+            <button class="btn-neon btn-quick @QuickBtnClass("month")" @onclick="QuickMonth">This Month</button>
+        </div>
+        <div class="filter-search-wrap">
+            <span class="bi bi-search filter-search-icon"></span>
+            <input id="input-search" type="text" class="form-input filter-search" placeholder="Search ID, tag, or staff..." @bind="searchQuery" @bind:event="oninput" />
+        </div>
+        <button id="btn-apply-filter" class="btn-primary-action btn-apply" @onclick="ApplyFilter">
+            <span class="bi bi-funnel-fill"></span> Apply
+        </button>
+    </div>
+
+    <!-- Daily Reconciliation Summary -->
+    <div class="recon-grid">
+        <div class="recon-card">
+            <div class="recon-accent recon-accent-cyan"></div>
+            <div class="recon-body">
+                <div class="recon-icon-wrap recon-icon-cyan">
+                    <span class="bi bi-receipt"></span>
+                </div>
+                <div class="recon-data">
+                    <span id="kpi-total-sessions" class="recon-value">@summary.TotalSessions</span>
+                    <span class="recon-label">Sessions</span>
+                </div>
+            </div>
+        </div>
+        <div class="recon-card">
+            <div class="recon-accent recon-accent-green"></div>
+            <div class="recon-body">
+                <div class="recon-icon-wrap recon-icon-green">
+                    <span class="bi bi-cash-coin"></span>
+                </div>
+                <div class="recon-data">
+                    <span id="kpi-total-revenue" class="recon-value">LKR @summary.TotalRevenue.ToString("F2")</span>
+                    <span class="recon-label">Revenue</span>
+                </div>
+            </div>
+        </div>
+        <div class="recon-card">
+            <div class="recon-accent recon-accent-amber"></div>
+            <div class="recon-body">
+                <div class="recon-icon-wrap recon-icon-amber">
+                    <span class="bi bi-clock-history"></span>
+                </div>
+                <div class="recon-data">
+                    <span id="kpi-avg-duration" class="recon-value">@summary.AverageDurationMinutes.ToString("F0") min</span>
+                    <span class="recon-label">Avg Duration</span>
+                </div>
+            </div>
+        </div>
+        <div class="recon-card">
+            <div class="recon-accent recon-accent-purple"></div>
+            <div class="recon-body">
+                <div class="recon-icon-wrap recon-icon-purple">
+                    <span class="bi bi-graph-up-arrow"></span>
+                </div>
+                <div class="recon-data">
+                    <span id="kpi-peak-hour" class="recon-value">@summary.PeakCheckOutHourDisplay</span>
+                    <span class="recon-label">Peak Hour</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Table -->
+    @if (isLoading)
+    {
+        <div class="empty-state-full">
+            <span class="bi bi-arrow-repeat rotating" style="font-size:2.5rem; color:var(--neon-cyan);"></span>
+            <p class="mt-3">Loading transactions...</p>
+        </div>
+    }
+    else if (!filteredTransactions.Any())
+    {
+        <div class="glass-card empty-state-full">
+            <span class="bi bi-inbox" style="font-size:3rem; color:var(--text-disabled);"></span>
+            <h3 class="mt-3 text-white">No Transactions Found</h3>
+            <p class="mt-1 text-muted-custom">Adjust the date range or search filter to find transactions.</p>
+        </div>
+    }
+    else
+    {
+        <div class="glass-card" style="border-top: 3px solid var(--neon-amber); padding:0; overflow:hidden;">
+            <div style="padding: 1.5rem 1.75rem 0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <p class="section-title" style="margin-bottom:0;">
+                    <span class="bi bi-list-check text-amber"></span> Transactions (@filteredTransactions.Count)
+                </p>
+                <span class="badge-neon info">@dateFrom.ToString("MMM dd") — @dateTo.ToString("MMM dd, yyyy")</span>
+            </div>
+            <div class="table-responsive" style="padding:0 0.5rem 1rem;">
+                <table class="table-glass" id="txn-table">
+                    <thead>
+                        <tr>
+                            <th @onclick="SortById" class="sortable-th">
+                                Session ID <span class="bi @SortIcon_Id"></span>
+                            </th>
+                            <th @onclick="SortByTag" class="sortable-th">
+                                Tag ID <span class="bi @SortIcon_Tag"></span>
+                            </th>
+                            <th @onclick="SortByCheckIn" class="sortable-th">
+                                Check-In <span class="bi @SortIcon_CheckIn"></span>
+                            </th>
+                            <th @onclick="SortByCheckOut" class="sortable-th">
+                                Check-Out <span class="bi @SortIcon_CheckOut"></span>
+                            </th>
+                            <th @onclick="SortByDuration" class="sortable-th">
+                                Duration <span class="bi @SortIcon_Duration"></span>
+                            </th>
+                            <th @onclick="SortByFee" class="sortable-th">
+                                Fee <span class="bi @SortIcon_Fee"></span>
+                            </th>
+                            <th>Staff</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in filteredTransactions)
+                        {
+                            <tr>
+                                <td class="font-mono text-cyan fw-bold" style="font-size:0.82rem;">
+                                    #@t.Id.ToString()[..8].ToUpper()
+                                </td>
+                                <td class="font-mono" style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @t.RfidTagId.ToString()[..8].ToUpper()
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @t.StartTime.ToLocalTime().ToString("MMM dd, HH:mm")
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @(t.EndTime.HasValue ? t.EndTime.Value.ToLocalTime().ToString("MMM dd, HH:mm") : "—")
+                                </td>
+                                <td>
+                                    <span class="badge-neon info">@(t.TotalDurationMinutes ?? 0) min</span>
+                                </td>
+                                <td>
+                                    <span class="fee-value">LKR @((t.Fee ?? 0).ToString("F2"))</span>
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @(string.IsNullOrEmpty(t.CheckedOutByStaff) ? "—" : t.CheckedOutByStaff)
+                                </td>
+                                <td>
+                                    <span class="badge-neon active"><span class="bi bi-check-circle-fill"></span> Completed</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- Audit Trail Slide Panel -->
+    @if (showAuditPanel)
+    {
+        <div class="audit-overlay" @onclick="ToggleAuditPanel"></div>
+        <div class="audit-panel glass-card">
+            <div class="audit-panel-header">
+                <h3 class="audit-panel-title">
+                    <span class="bi bi-shield-lock-fill text-purple"></span> Manager Audit Trail
+                </h3>
+                <button class="btn-neon btn-neon-red btn-sm" @onclick="ToggleAuditPanel">
+                    <span class="bi bi-x-lg"></span>
+                </button>
+            </div>
+            @if (!auditLogs.Any())
+            {
+                <div class="empty-state" style="min-height:120px;">
+                    <span class="bi bi-journal-x" style="font-size:2rem; color:var(--text-disabled);"></span>
+                    <p class="mt-2 text-muted-custom" style="font-size:0.85rem;">No audit entries yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="audit-log-list">
+                    @foreach (var log in auditLogs)
+                    {
+                        <div class="audit-log-item">
+                            <div class="audit-log-dot"></div>
+                            <div class="audit-log-content">
+                                <div class="audit-log-action">
+                                    <span class="fw-bold">@log.ManagerName</span>
+                                    <span class="badge-neon @GetAuditBadgeClass(log.Action)">@log.Action</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(log.Details))
+                                {
+                                    <p class="audit-log-details">@log.Details</p>
+                                }
+                                <span class="audit-log-time">@log.Timestamp.ToLocalTime().ToString("MMM dd, HH:mm:ss")</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    /* ── TRANSACTION PAGE WRAPPER ──────────────────────────────── */
+    .txn-wrap { padding-bottom: 2rem; }
+
+    .txn-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+    }
+    .txn-title {
+        font-size: 1.75rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #fff 40%, var(--neon-amber) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+    .txn-subtitle { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.3rem; }
+
+    .header-actions-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+    /* ── FILTER BAR ────────────────────────────────────────────── */
+    .filter-bar {
+        display: flex;
+        align-items: flex-end;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.75rem;
+        animation: slideUp 0.4s ease;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .filter-label {
+        font-family: var(--font-heading);
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+    .filter-date { width: 160px; font-size: 0.85rem; padding: 0.6rem 0.8rem; }
+
+    .filter-quick-btns { display: flex; gap: 0.5rem; }
+    .btn-quick {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.9rem;
+        border-color: var(--surface-border-strong);
+        color: var(--text-secondary);
+        border-radius: 100px;
+        transition: all 0.25s;
+    }
+    .btn-quick:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+    .btn-quick-active {
+        background: rgba(0,240,255,0.1) !important;
+        border-color: var(--neon-cyan) !important;
+        color: var(--neon-cyan) !important;
+        box-shadow: 0 0 12px rgba(0,240,255,0.15);
+    }
+
+    .filter-search-wrap {
+        flex: 1;
+        min-width: 200px;
+        position: relative;
+    }
+    .filter-search-icon {
+        position: absolute;
+        left: 0.85rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-disabled);
+        font-size: 0.85rem;
+        pointer-events: none;
+    }
+    .filter-search { padding-left: 2.4rem; font-size: 0.85rem; }
+
+    .btn-apply {
+        padding: 0.65rem 1.2rem;
+        font-size: 0.82rem;
+        white-space: nowrap;
+    }
+
+    /* ── RECONCILIATION KPI GRID ──────────────────────────────── */
+    .recon-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.25rem;
+        margin-bottom: 1.75rem;
+        animation: slideUp 0.5s ease;
+    }
+    @@media (max-width: 1100px) { .recon-grid { grid-template-columns: repeat(2, 1fr); } }
+    @@media (max-width: 600px) { .recon-grid { grid-template-columns: 1fr; } }
+
+    .recon-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        position: relative;
+        transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+    }
+    .recon-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .recon-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--surface-border-strong);
+    }
+
+    .recon-accent { height: 3px; width: 100%; }
+    .recon-accent-cyan { background: linear-gradient(90deg, var(--neon-cyan), transparent); }
+    .recon-accent-green { background: linear-gradient(90deg, var(--status-active), transparent); }
+    .recon-accent-amber { background: linear-gradient(90deg, var(--neon-amber), transparent); }
+    .recon-accent-purple { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+
+    .recon-card:hover { box-shadow: var(--shadow-card), 0 0 16px rgba(255,255,255,0.04); }
+
+    .recon-body {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 1.5rem 1.75rem;
+    }
+    .recon-icon-wrap {
+        width: 48px; height: 48px;
+        border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+    .recon-icon-cyan { background: rgba(0,240,255,0.1); color: var(--neon-cyan); }
+    .recon-icon-green { background: rgba(0,230,118,0.12); color: var(--status-active); }
+    .recon-icon-amber { background: rgba(255,184,0,0.1); color: var(--neon-amber); }
+    .recon-icon-purple { background: rgba(157,0,255,0.1); color: var(--neon-purple); }
+
+    .recon-data { display: flex; flex-direction: column; }
+    .recon-value {
+        font-family: var(--font-heading);
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+    .recon-label {
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+
+    /* ── TABLE ENHANCEMENTS ────────────────────────────────────── */
+    .sortable-th {
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.2s;
+    }
+    .sortable-th:hover { color: var(--neon-cyan) !important; }
+
+    .fee-value {
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--status-active);
+    }
+
+    .empty-state-full {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 280px; text-align: center; color: var(--text-secondary);
+    }
+
+    .table-responsive { overflow-x: auto; }
+
+    /* ── AUDIT TRAIL PANEL ─────────────────────────────────────── */
+    .audit-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        z-index: 900;
+        animation: fadeIn 0.2s ease;
+    }
+    .audit-panel {
+        position: fixed;
+        top: 0; right: 0; bottom: 0;
+        width: 420px;
+        max-width: 90vw;
+        z-index: 910;
+        border-radius: 0;
+        border-left: 1px solid var(--surface-border-strong);
+        overflow-y: auto;
+        animation: slideInRight 0.3s ease;
+        padding: 1.5rem;
+    }
+    .audit-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--surface-border);
+    }
+    .audit-panel-title {
+        font-size: 1rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0;
+    }
+    .btn-sm { padding: 0.4rem 0.6rem; font-size: 0.75rem; }
+
+    .audit-log-list { display: flex; flex-direction: column; gap: 0; }
+    .audit-log-item {
+        display: flex;
+        gap: 0.85rem;
+        padding: 0.85rem 0;
+        border-bottom: 1px solid var(--surface-border);
+        animation: slideUp 0.3s ease;
+    }
+    .audit-log-item:last-child { border-bottom: none; }
+
+    .audit-log-dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: var(--neon-purple);
+        margin-top: 5px;
+        flex-shrink: 0;
+        box-shadow: 0 0 8px rgba(157,0,255,0.4);
+    }
+    .audit-log-content { flex: 1; }
+    .audit-log-action {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        font-size: 0.85rem;
+        color: var(--text-primary);
+    }
+    .audit-log-details {
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+        line-height: 1.4;
+    }
+    .audit-log-time {
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        color: var(--text-disabled);
+        margin-top: 0.3rem;
+        display: block;
+    }
+
+    @@keyframes slideInRight {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+
+    .empty-state {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 120px; text-align: center; color: var(--text-secondary);
+    }
+</style>
+
+@code {
+    private List<TransactionDto> transactions = new();
+    private List<TransactionDto> filteredTransactions = new();
+    private TransactionSummaryDto summary = new();
+    private List<AuditLogEntryDto> auditLogs = new();
+
+    private DateTime dateFrom = DateTime.UtcNow.Date;
+    private DateTime dateTo = DateTime.UtcNow.Date;
+    private string searchQuery = string.Empty;
+    private string activeQuick = "today";
+    private string sortColumn = "checkout";
+    private bool sortAscending = false;
+    private bool isLoading = true;
+    private bool showAuditPanel = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAll();
+    }
+
+    private async Task RefreshAll()
+    {
+        isLoading = true;
+        await Task.WhenAll(LoadTransactions(), LoadSummary(), LoadAuditLogs());
+        ApplySearchFilter();
+        isLoading = false;
+
+        // Log that the manager viewed transactions
+        await LogAuditAction("ViewedTransactions", $"Date range: {dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}");
+    }
+
+    private async Task ApplyFilter()
+    {
+        activeQuick = "";
+        isLoading = true;
+        await Task.WhenAll(LoadTransactions(), LoadSummary());
+        ApplySearchFilter();
+        isLoading = false;
+    }
+
+    private async Task LoadTransactions()
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            var from = dateFrom.ToString("yyyy-MM-dd");
+            var to = dateTo.AddDays(1).AddTicks(-1).ToString("o");
+            var result = await client.GetFromJsonAsync<List<TransactionDto>>($"/api/transactions?from={from}&to={to}");
+            transactions = result ?? new();
+        }
+        catch
+        {
+            transactions = new();
+        }
+    }
+
+    private async Task LoadSummary()
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            var date = dateFrom.ToString("yyyy-MM-dd");
+            var result = await client.GetFromJsonAsync<TransactionSummaryDto>($"/api/transactions/summary?date={date}");
+            summary = result ?? new();
+        }
+        catch
+        {
+            summary = new();
+        }
+    }
+
+    private async Task LoadAuditLogs()
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            var result = await client.GetFromJsonAsync<List<AuditLogEntryDto>>("/api/audit/logs?limit=30");
+            auditLogs = result ?? new();
+        }
+        catch
+        {
+            auditLogs = new();
+        }
+    }
+
+    private async Task LogAuditAction(string action, string? details = null)
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            await client.PostAsJsonAsync("/api/audit/log", new { ManagerName = "Admin", Action = action, Details = details });
+        }
+        catch { /* silently fail — non-critical */ }
+    }
+
+    private void ApplySearchFilter()
+    {
+        var query = searchQuery?.Trim().ToLowerInvariant() ?? "";
+        var filtered = string.IsNullOrEmpty(query)
+            ? transactions
+            : transactions.Where(t =>
+                t.Id.ToString().ToLowerInvariant().Contains(query) ||
+                t.RfidTagId.ToString().ToLowerInvariant().Contains(query) ||
+                (t.CheckedOutByStaff ?? "").ToLowerInvariant().Contains(query)
+            ).ToList();
+
+        filteredTransactions = ApplySort(filtered);
+    }
+
+    private async Task SetQuickFilter(string mode)
+    {
+        activeQuick = mode;
+        dateTo = DateTime.UtcNow.Date;
+
+        dateFrom = mode switch
+        {
+            "today" => DateTime.UtcNow.Date,
+            "week" => DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.DayOfWeek),
+            "month" => new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1),
+            _ => DateTime.UtcNow.Date
+        };
+
+        isLoading = true;
+        await Task.WhenAll(LoadTransactions(), LoadSummary());
+        ApplySearchFilter();
+        isLoading = false;
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+            sortAscending = !sortAscending;
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        filteredTransactions = ApplySort(filteredTransactions);
+    }
+
+    private List<TransactionDto> ApplySort(List<TransactionDto> data)
+    {
+        return sortColumn switch
+        {
+            "id" => sortAscending ? data.OrderBy(t => t.Id).ToList() : data.OrderByDescending(t => t.Id).ToList(),
+            "tag" => sortAscending ? data.OrderBy(t => t.RfidTagId).ToList() : data.OrderByDescending(t => t.RfidTagId).ToList(),
+            "checkin" => sortAscending ? data.OrderBy(t => t.StartTime).ToList() : data.OrderByDescending(t => t.StartTime).ToList(),
+            "checkout" => sortAscending ? data.OrderBy(t => t.EndTime).ToList() : data.OrderByDescending(t => t.EndTime).ToList(),
+            "duration" => sortAscending ? data.OrderBy(t => t.TotalDurationMinutes ?? 0).ToList() : data.OrderByDescending(t => t.TotalDurationMinutes ?? 0).ToList(),
+            "fee" => sortAscending ? data.OrderBy(t => t.Fee ?? 0).ToList() : data.OrderByDescending(t => t.Fee ?? 0).ToList(),
+            _ => data
+        };
+    }
+
+    // Quick filter helpers to avoid escaped strings in Razor lambdas
+    private async Task QuickToday() => await SetQuickFilter("today");
+    private async Task QuickWeek() => await SetQuickFilter("week");
+    private async Task QuickMonth() => await SetQuickFilter("month");
+    private string QuickBtnClass(string mode) => activeQuick == mode ? "btn-quick-active" : "";
+
+    // Sort click handlers
+    private void SortById() => SortBy("id");
+    private void SortByTag() => SortBy("tag");
+    private void SortByCheckIn() => SortBy("checkin");
+    private void SortByCheckOut() => SortBy("checkout");
+    private void SortByDuration() => SortBy("duration");
+    private void SortByFee() => SortBy("fee");
+
+    // Sort icon computed properties
+    private string SortIcon_Id => GetSortIcon("id");
+    private string SortIcon_Tag => GetSortIcon("tag");
+    private string SortIcon_CheckIn => GetSortIcon("checkin");
+    private string SortIcon_CheckOut => GetSortIcon("checkout");
+    private string SortIcon_Duration => GetSortIcon("duration");
+    private string SortIcon_Fee => GetSortIcon("fee");
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column) return "bi-chevron-expand";
+        return sortAscending ? "bi-chevron-up" : "bi-chevron-down";
+    }
+
+    private async Task ExportCsv()
+    {
+        if (!filteredTransactions.Any()) return;
+
+        var csv = "Session ID,Tag ID,Check-In,Check-Out,Duration (min),Fee (LKR),Staff,Status\n";
+        foreach (var t in filteredTransactions)
+        {
+            var staff = t.CheckedOutByStaff ?? "N/A";
+            csv += $"{t.Id},{t.RfidTagId},{t.StartTime:o},{t.EndTime:o},{t.TotalDurationMinutes ?? 0},{(t.Fee ?? 0):F2},{staff},Completed\n";
+        }
+
+        // Trigger download via JS interop
+        var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+        var base64 = Convert.ToBase64String(bytes);
+        Nav.NavigateTo($"data:text/csv;base64,{base64}", true);
+
+        // Log audit
+        await LogAuditAction("ExportedCSV", $"Exported {filteredTransactions.Count} transactions ({dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd})");
+        await LoadAuditLogs();
+    }
+
+    private void ToggleAuditPanel()
+    {
+        showAuditPanel = !showAuditPanel;
+    }
+
+    private string GetAuditBadgeClass(string action) => action switch
+    {
+        "ViewedTransactions" => "info",
+        "ExportedCSV" => "success",
+        "ReconciliationReview" => "warning",
+        _ => "idle"
+    };
+
+    // DTOs
+    private class TransactionDto
+    {
+        public Guid Id { get; set; }
+        public Guid RfidTagId { get; set; }
+        public DateTime StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public int? TotalDurationMinutes { get; set; }
+        public decimal? Fee { get; set; }
+        public string? CheckedOutByStaff { get; set; }
+    }
+
+    private class TransactionSummaryDto
+    {
+        public DateTime Date { get; set; }
+        public int TotalSessions { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public double AverageDurationMinutes { get; set; }
+        public int PeakCheckOutHour { get; set; }
+        public string PeakCheckOutHourDisplay { get; set; } = "N/A";
+        public decimal HighestSingleFee { get; set; }
+        public int LongestSessionMinutes { get; set; }
+    }
+
+    private class AuditLogEntryDto
+    {
+        public Guid Id { get; set; }
+        public string ManagerName { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public string? Details { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+}

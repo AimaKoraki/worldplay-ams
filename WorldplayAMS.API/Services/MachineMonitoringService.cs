@@ -1,73 +1,72 @@
 using Microsoft.Extensions.Logging;
 using WorldplayAMS.Core.Models;
+using WorldplayAMS.Core.Interfaces;
 using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 
 namespace WorldplayAMS.API.Services;
 
-public class MachineMonitoringService
-{
-    private readonly Supabase.Client _supabase;
-    private readonly IFallbackCacheService _fallbackCache;
-    private readonly ILogger<MachineMonitoringService> _logger;
-
-    public MachineMonitoringService(Supabase.Client supabase, IFallbackCacheService fallbackCache, ILogger<MachineMonitoringService> logger)
+    public class MachineMonitoringService
     {
-        _supabase = supabase;
-        _fallbackCache = fallbackCache;
-        _logger = logger;
-    }
+        private readonly ISupabaseRepository _repository;
+        private readonly IFallbackCacheService _fallbackCache;
+        private readonly ILogger<MachineMonitoringService> _logger;
 
-    public async Task<string> ProcessMachineToggleAsync(Guid machineId)
-    {
-        try
+        public MachineMonitoringService(ISupabaseRepository repository, IFallbackCacheService fallbackCache, ILogger<MachineMonitoringService> logger)
         {
-            var activeLogResponse = await _supabase.From<MachineUsageLog>()
-                .Where(m => m.MachineId == machineId && m.Status == "Active")
-                .Single();
-
-            if (activeLogResponse == null)
-            {
-                var newLog = new MachineUsageLog
-                {
-                    Id = Guid.NewGuid(),
-                    MachineId = machineId,
-                    StartTime = DateTime.UtcNow,
-                    Status = "Active"
-                };
-                
-                await _supabase.From<MachineUsageLog>().Insert(newLog);
-                
-                var machine = await _supabase.From<ArcadeMachine>().Where(m => m.Id == machineId).Single();
-                if (machine != null) {
-                    machine.Status = "InUse";
-                    await _supabase.From<ArcadeMachine>().Update(machine);
-                }
-
-                return "Success: Tracking started.";
-            }
-            else
-            {
-                var log = activeLogResponse;
-                log.EndTime = DateTime.UtcNow;
-                log.Status = "Completed";
-                if (log.EndTime.HasValue) 
-                {
-                    log.DurationMinutes = (int)(log.EndTime.Value - log.StartTime).TotalMinutes;
-                }
-
-                await _supabase.From<MachineUsageLog>().Update(log);
-
-                var machine = await _supabase.From<ArcadeMachine>().Where(m => m.Id == machineId).Single();
-                if (machine != null) {
-                    machine.Status = "Online";
-                    await _supabase.From<ArcadeMachine>().Update(machine);
-                }
-
-                return $"Success: Tracking stopped. Duration: {log.DurationMinutes} min.";
-            }
+            _repository = repository;
+            _fallbackCache = fallbackCache;
+            _logger = logger;
         }
+
+        public async Task<string> ProcessMachineToggleAsync(Guid machineId)
+        {
+            try
+            {
+                var activeLogResponse = await _repository.GetActiveMachineLogAsync(machineId);
+
+                if (activeLogResponse == null)
+                {
+                    var newLog = new MachineUsageLog
+                    {
+                        Id = Guid.NewGuid(),
+                        MachineId = machineId,
+                        StartTime = DateTime.UtcNow,
+                        Status = "Active"
+                    };
+                    
+                    await _repository.InsertMachineLogAsync(newLog);
+                    
+                    var machine = await _repository.GetMachineAsync(machineId);
+                    if (machine != null) {
+                        machine.Status = "InUse";
+                        await _repository.UpdateMachineAsync(machine);
+                    }
+
+                    return "Success: Tracking started.";
+                }
+                else
+                {
+                    var log = activeLogResponse;
+                    log.EndTime = DateTime.UtcNow;
+                    log.Status = "Completed";
+                    if (log.EndTime.HasValue) 
+                    {
+                        log.DurationMinutes = (int)(log.EndTime.Value - log.StartTime).TotalMinutes;
+                    }
+
+                    await _repository.UpdateMachineLogAsync(log);
+
+                    var machine = await _repository.GetMachineAsync(machineId);
+                    if (machine != null) {
+                        machine.Status = "Online";
+                        await _repository.UpdateMachineAsync(machine);
+                    }
+
+                    return $"Success: Tracking stopped. Duration: {log.DurationMinutes} min.";
+                }
+            }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed mapping machine telemetry offline.");
@@ -80,8 +79,7 @@ public class MachineMonitoringService
     {
         try
         {
-            var response = await _supabase.From<ArcadeMachine>().Get();
-            return response.Models;
+            return await _repository.GetAllMachinesAsync();
         }
         catch (Exception ex)
         {
@@ -93,8 +91,7 @@ public class MachineMonitoringService
     {
         try
         {
-            var response = await _supabase.From<MachineUsageLog>().Get();
-            return response.Models ?? new List<MachineUsageLog>();
+            return await _repository.GetAllMachineUsageLogsAsync();
         }
         catch (Exception ex)
         {

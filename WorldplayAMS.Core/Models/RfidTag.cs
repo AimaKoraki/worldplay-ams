@@ -43,4 +43,7 @@ public class Session : BaseModel
 
     [Column("fee")]
     public decimal? Fee { get; set; }
+
+    [Column("checkedoutbystaff")]
+    public string? CheckedOutByStaff { get; set; }
 }

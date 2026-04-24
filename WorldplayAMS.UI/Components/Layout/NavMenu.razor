@@ -45,6 +45,16 @@
                     </div>
                 </AuthorizeView>
 
+                <AuthorizeView Roles="Admin" Context="adminContext">
+                    <span class="nav-section-label" style="margin-top:0.75rem;">Management</span>
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="transactions">
+                            <span class="bi bi-receipt-cutoff nav-icon"></span>
+                            Transaction History
+                        </NavLink>
+                    </div>
+                </AuthorizeView>
+
                 <AuthorizeView Roles="Admin,Technician" Context="techContext">
                     <div class="nav-item mb-1">
                         <NavLink class="glass-nav-link" href="technician">

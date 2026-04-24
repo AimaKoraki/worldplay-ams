@@ -26,7 +26,8 @@ CREATE TABLE Sessions (
     EndTime TIMESTAMPTZ,
     Status TEXT CHECK (Status IN ('Active', 'Completed')) DEFAULT 'Active',
     TotalDurationMinutes INT,
-    Fee DECIMAL(10,2)
+    Fee DECIMAL(10,2),
+    CheckedOutByStaff TEXT
 );
 
 -- Constraint: Ensure an RfidTag can only have one Active session at a time
@@ -74,4 +75,19 @@ CREATE POLICY "ServiceRole Full Access ArcadeMachines" ON ArcadeMachines
     FOR ALL USING (auth.role() = 'service_role');
 
 CREATE POLICY "ServiceRole Full Access MachineUsageLogs" ON MachineUsageLogs
+    FOR ALL USING (auth.role() = 'service_role');
+
+-- DEV-13 Manager Audit Logs Schema
+CREATE TABLE ManagerAuditLogs (
+    Id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ManagerId UUID REFERENCES Users(Id),
+    ManagerName TEXT NOT NULL,
+    Action TEXT NOT NULL,
+    Details TEXT,
+    Timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE ManagerAuditLogs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "ServiceRole Full Access ManagerAuditLogs" ON ManagerAuditLogs
     FOR ALL USING (auth.role() = 'service_role');

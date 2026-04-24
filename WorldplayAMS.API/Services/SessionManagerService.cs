@@ -1,28 +1,23 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using WorldplayAMS.Core.Models;
+using WorldplayAMS.Core.Interfaces;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
 
 namespace WorldplayAMS.API.Services;
 
-public class SessionManagerService
-{
-    private readonly Supabase.Client _supabase;
-    private readonly IFallbackCacheService _fallbackCache;
-    private readonly ILogger<SessionManagerService> _logger;
-    private readonly decimal _ratePerMinute;
-
-    public SessionManagerService(Supabase.Client supabase, IFallbackCacheService fallbackCache, ILogger<SessionManagerService> logger, IConfiguration configuration)
+    public class SessionManagerService
     {
-        _supabase = supabase;
-        _fallbackCache = fallbackCache;
-        _logger = logger;
-        _ratePerMinute = configuration.GetValue<decimal>("Billing:RatePerMinute", 0.15m);
-    }
+        private readonly ISupabaseRepository _repository;
+        private readonly IFallbackCacheService _fallbackCache;
+        private readonly ILogger<SessionManagerService> _logger;
+        private readonly decimal _ratePerMinute;
 
-    public async Task<string> ProcessRfidTapAsync(string tagString)
-    {
-        try
+        public SessionManagerService(ISupabaseRepository repository, IFallbackCacheService fallbackCache, ILogger<SessionManagerService> logger, IConfiguration configuration)
         {
+<<<<<<< Updated upstream
             // 1. Validate Tag
             var tagResponse = await _supabase.From<RfidTag>()
                 .Where(t => t.TagString == tagString && t.Status == "Active")
@@ -64,7 +59,56 @@ public class SessionManagerService
                 await _supabase.From<Session>().Update(session);
                 return $"Success: Checked out. Duration: {session.TotalDurationMinutes} min | Fee: ${session.Fee:F2}";
             }
+=======
+            _repository = repository;
+            _fallbackCache = fallbackCache;
+            _logger = logger;
+            _ratePerMinute = configuration.GetValue<decimal>("Billing:RatePerMinute", 0.15m);
+>>>>>>> Stashed changes
         }
+
+        public async Task<string> ProcessRfidTapAsync(string tagString, string? staffName = null)
+        {
+            try
+            {
+                // First check if the tag exists at all (regardless of status)
+                var anyTag = await _repository.GetTagByStringAsync(tagString);
+                if (anyTag == null) return "Error: RFID tag not found in system.";
+                if (anyTag.Status == "Lost") return "Error: This RFID tag has been reported lost. Please contact a manager.";
+                if (anyTag.Status != "Active") return $"Error: RFID tag is currently '{anyTag.Status}'. Cannot process.";
+
+                var tagResponse = anyTag;
+
+                var activeSessionResponse = await _repository.GetActiveSessionAsync(tagResponse.Id);
+
+                if (activeSessionResponse == null)
+                {
+                    var newSession = new Session
+                    {
+                        Id = Guid.NewGuid(),
+                        RfidTagId = tagResponse.Id,
+                        StartTime = DateTime.UtcNow,
+                        Status = "Active"
+                    };
+
+                    await _repository.InsertSessionAsync(newSession);
+                    return "Success: Checked in!";
+                }
+                else
+                {
+                    var session = activeSessionResponse;
+                    session.EndTime = DateTime.UtcNow;
+                    session.Status = "Completed";
+                    session.TotalDurationMinutes = (int)Math.Ceiling((session.EndTime.Value - session.StartTime).TotalMinutes);
+                    session.Fee = session.TotalDurationMinutes * _ratePerMinute;
+                    session.CheckedOutByStaff = staffName ?? "Unknown";
+
+                    await _repository.UpdateSessionAsync(session);
+                    _logger.LogInformation("Check-out completed by staff '{Staff}' for tag '{Tag}' at {Time:u}. Duration: {Duration} min, Fee: LKR {Fee:F2}",
+                        session.CheckedOutByStaff, tagString, session.EndTime.Value, session.TotalDurationMinutes, session.Fee);
+                    return $"Success: Checked out. Duration: {session.TotalDurationMinutes} min | Fee: LKR {session.Fee:F2}";
+                }
+            }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Supabase connection failed. Queuing payload.");
@@ -77,10 +121,7 @@ public class SessionManagerService
     {
         try
         {
-            var response = await _supabase.From<Session>()
-                .Where(s => s.Status == "Active")
-                .Get();
-            return response.Models ?? new List<Session>();
+            return await _repository.GetActiveSessionsAsync();
         }
         catch (Exception ex)
         {
@@ -93,10 +134,7 @@ public class SessionManagerService
     {
         try
         {
-            var response = await _supabase.From<Session>()
-                .Where(s => s.Status == "Completed")
-                .Get();
-            return response.Models ?? new List<Session>();
+            return await _repository.GetCompletedSessionsAsync();
         }
         catch (Exception ex)
         {
