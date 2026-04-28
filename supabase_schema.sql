@@ -75,8 +75,6 @@ CREATE POLICY "ServiceRole Full Access ArcadeMachines" ON ArcadeMachines
 
 CREATE POLICY "ServiceRole Full Access MachineUsageLogs" ON MachineUsageLogs
     FOR ALL USING (auth.role() = 'service_role');
-<<<<<<< Updated upstream
-=======
 
 -- DEV-13 Manager Audit Logs Schema
 CREATE TABLE ManagerAuditLogs (
@@ -120,4 +118,3 @@ ALTER TABLE DigitalReceipts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "ServiceRole Full Access DigitalReceipts" ON DigitalReceipts
     FOR ALL USING (auth.role() = 'service_role');
->>>>>>> Stashed changes

@@ -43,8 +43,6 @@ public class Session : BaseModel
 
     [Column("fee")]
     public decimal? Fee { get; set; }
-<<<<<<< Updated upstream
-=======
 
     [Column("checkedoutbystaff")]
     public string? CheckedOutByStaff { get; set; }
@@ -54,5 +52,4 @@ public class Session : BaseModel
 
     [Column("machineid")]
     public Guid? MachineId { get; set; }
->>>>>>> Stashed changes
 }

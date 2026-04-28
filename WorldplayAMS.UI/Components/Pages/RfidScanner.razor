@@ -437,13 +437,10 @@
     private bool isCheckout = false;
     private string checkoutDuration = "";
     private string checkoutFee = "";
-<<<<<<< Updated upstream
-=======
     private string staffName = "Unknown";
     private string guestName = string.Empty;
     private string selectedMachineId = string.Empty;
     private List<MachineDto> machines = new();
->>>>>>> Stashed changes
     private ElementReference rfidInputRef;
 
     protected override async Task OnInitializedAsync()
@@ -516,9 +513,6 @@
         var client = ClientFactory.CreateClient("ApiClient");
         try
         {
-<<<<<<< Updated upstream
-            var response = await client.PostAsJsonAsync("/api/sessions/process-tap", new { TagString = tagStr });
-=======
             Guid? machineId = string.IsNullOrEmpty(selectedMachineId) ? null : Guid.Parse(selectedMachineId);
             var payload = new
             {
@@ -528,7 +522,6 @@
                 MachineId = machineId
             };
             var response = await client.PostAsJsonAsync("/api/sessions/process-tap", payload);
->>>>>>> Stashed changes
             var resultMessage = await response.Content.ReadAsStringAsync();
             isError = resultMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
             statusMessage = resultMessage.Trim('"');
