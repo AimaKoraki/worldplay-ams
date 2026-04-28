@@ -84,6 +84,24 @@
                 </div>
             }
 
+            <!-- Guest info inputs -->
+            <div class="scanner-guest-inputs">
+                <div class="guest-input-group">
+                    <label class="guest-input-label"><span class="bi bi-person-fill"></span> Guest Name</label>
+                    <input type="text" class="form-input guest-name-input" placeholder="Walk-in Guest (optional)" @bind="guestName" />
+                </div>
+                <div class="guest-input-group">
+                    <label class="guest-input-label"><span class="bi bi-joystick"></span> Machine</label>
+                    <select class="form-input machine-select" @bind="selectedMachineId">
+                        <option value="">— No machine —</option>
+                        @foreach (var m in machines)
+                        {
+                            <option value="@m.Id">@m.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
             <!-- Hidden RFID input -->
             <input type="text"
                    class="hidden-rfid-input"
@@ -375,6 +393,40 @@
         height: 40px;
         background: var(--surface-border-strong);
     }
+
+    /* Guest info inputs */
+    .scanner-guest-inputs {
+        width: calc(100% - 3rem);
+        margin: 0 1.5rem 2rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .guest-input-group {
+        flex: 1;
+        min-width: 160px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+    .guest-input-label {
+        font-family: var(--font-heading);
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .guest-name-input, .machine-select {
+        font-size: 0.85rem;
+        padding: 0.6rem 0.8rem;
+    }
+    .machine-select {
+        cursor: pointer;
+    }
 </style>
 
 @code {
@@ -385,11 +437,31 @@
     private bool isCheckout = false;
     private string checkoutDuration = "";
     private string checkoutFee = "";
+    private string staffName = "Unknown";
+    private string guestName = string.Empty;
+    private string selectedMachineId = string.Empty;
+    private List<MachineDto> machines = new();
     private ElementReference rfidInputRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMachines();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender) await FocusInput();
+    }
+
+    private async Task LoadMachines()
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            var result = await client.GetFromJsonAsync<List<MachineDto>>("/api/machines");
+            machines = result ?? new();
+        }
+        catch { machines = new(); }
     }
 
     private async Task FocusInput()
@@ -441,11 +513,26 @@
         var client = ClientFactory.CreateClient("ApiClient");
         try
         {
-            var response = await client.PostAsJsonAsync("/api/sessions/process-tap", new { TagString = tagStr });
+            Guid? machineId = string.IsNullOrEmpty(selectedMachineId) ? null : Guid.Parse(selectedMachineId);
+            var payload = new
+            {
+                TagString = tagStr,
+                StaffName = staffName,
+                GuestName = string.IsNullOrWhiteSpace(guestName) ? (string?)null : guestName.Trim(),
+                MachineId = machineId
+            };
+            var response = await client.PostAsJsonAsync("/api/sessions/process-tap", payload);
             var resultMessage = await response.Content.ReadAsStringAsync();
             isError = resultMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
             statusMessage = resultMessage.Trim('"');
             ParseCheckoutResponse(statusMessage);
+
+            // Reset guest fields after successful check-in
+            if (!isError && !isCheckout)
+            {
+                guestName = string.Empty;
+                selectedMachineId = string.Empty;
+            }
         }
         catch
         {
@@ -466,5 +553,13 @@
             isCheckout = false;
             await InvokeAsync(StateHasChanged);
         });
+    }
+
+    private class MachineDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string MachineType { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
     }
 }

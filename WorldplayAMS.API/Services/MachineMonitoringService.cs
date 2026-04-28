@@ -8,24 +8,24 @@ namespace WorldplayAMS.API.Services;
 
 public class MachineMonitoringService
 {
-    private readonly Supabase.Client _supabase;
+    private readonly ISupabaseRepository _repository;
     private readonly IFallbackCacheService _fallbackCache;
     private readonly ILogger<MachineMonitoringService> _logger;
 
-    public MachineMonitoringService(Supabase.Client supabase, IFallbackCacheService fallbackCache, ILogger<MachineMonitoringService> logger)
+    public MachineMonitoringService(ISupabaseRepository repository, IFallbackCacheService fallbackCache, ILogger<MachineMonitoringService> logger)
     {
-        _supabase = supabase;
+        _repository = repository;
         _fallbackCache = fallbackCache;
         _logger = logger;
     }
 
-    public async Task<string> ProcessMachineToggleAsync(Guid machineId)
+    public async Task<string> ProcessMachineToggleAsync(Guid machineId, string technicianName = "Unknown Technician")
     {
         try
         {
-            var activeLogResponse = await _supabase.From<MachineUsageLog>()
-                .Where(m => m.MachineId == machineId && m.Status == "Active")
-                .Single();
+            var activeLogResponse = await _repository.GetActiveMachineLogAsync(machineId);
+            var machine = await _repository.GetMachineAsync(machineId);
+            var machineName = machine?.Name ?? "Unknown Machine";
 
             if (activeLogResponse == null)
             {
@@ -37,13 +37,22 @@ public class MachineMonitoringService
                     Status = "Active"
                 };
                 
-                await _supabase.From<MachineUsageLog>().Insert(newLog);
+                await _repository.InsertMachineLogAsync(newLog);
                 
-                var machine = await _supabase.From<ArcadeMachine>().Where(m => m.Id == machineId).Single();
                 if (machine != null) {
                     machine.Status = "InUse";
-                    await _supabase.From<ArcadeMachine>().Update(machine);
+                    await _repository.UpdateMachineAsync(machine);
                 }
+
+                // DEV-07: Log audit trail for starting a machine session
+                await _repository.InsertAuditLogAsync(new ManagerAuditLog
+                {
+                    Id = Guid.NewGuid(),
+                    ManagerId = Guid.Empty, // Technician actions don't map to a strict User ID right now
+                    ManagerName = technicianName,
+                    Action = "StartMachineSession",
+                    Details = $"Started session on machine: {machineName} ({machineId})"
+                });
 
                 return "Success: Tracking started.";
             }
@@ -54,16 +63,26 @@ public class MachineMonitoringService
                 log.Status = "Completed";
                 if (log.EndTime.HasValue) 
                 {
-                    log.DurationMinutes = (int)(log.EndTime.Value - log.StartTime).TotalMinutes;
+                    // Fix: Use Math.Ceiling to match session billing logic
+                    log.DurationMinutes = (int)Math.Ceiling((log.EndTime.Value - log.StartTime).TotalMinutes);
                 }
 
-                await _supabase.From<MachineUsageLog>().Update(log);
+                await _repository.UpdateMachineLogAsync(log);
 
-                var machine = await _supabase.From<ArcadeMachine>().Where(m => m.Id == machineId).Single();
                 if (machine != null) {
                     machine.Status = "Online";
-                    await _supabase.From<ArcadeMachine>().Update(machine);
+                    await _repository.UpdateMachineAsync(machine);
                 }
+
+                // DEV-07: Log audit trail for stopping a machine session
+                await _repository.InsertAuditLogAsync(new ManagerAuditLog
+                {
+                    Id = Guid.NewGuid(),
+                    ManagerId = Guid.Empty,
+                    ManagerName = technicianName,
+                    Action = "StopMachineSession",
+                    Details = $"Stopped session on machine: {machineName} ({machineId}). Duration: {log.DurationMinutes} min."
+                });
 
                 return $"Success: Tracking stopped. Duration: {log.DurationMinutes} min.";
             }
@@ -80,8 +99,7 @@ public class MachineMonitoringService
     {
         try
         {
-            var response = await _supabase.From<ArcadeMachine>().Get();
-            return response.Models;
+            return await _repository.GetAllMachinesAsync();
         }
         catch (Exception ex)
         {
@@ -93,8 +111,7 @@ public class MachineMonitoringService
     {
         try
         {
-            var response = await _supabase.From<MachineUsageLog>().Get();
-            return response.Models ?? new List<MachineUsageLog>();
+            return await _repository.GetAllMachineUsageLogsAsync();
         }
         catch (Exception ex)
         {
