@@ -75,3 +75,49 @@ CREATE POLICY "ServiceRole Full Access ArcadeMachines" ON ArcadeMachines
 
 CREATE POLICY "ServiceRole Full Access MachineUsageLogs" ON MachineUsageLogs
     FOR ALL USING (auth.role() = 'service_role');
+<<<<<<< Updated upstream
+=======
+
+-- DEV-13 Manager Audit Logs Schema
+CREATE TABLE ManagerAuditLogs (
+    Id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ManagerId UUID REFERENCES Users(Id),
+    ManagerName TEXT NOT NULL,
+    Action TEXT NOT NULL,
+    Details TEXT,
+    Timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE ManagerAuditLogs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "ServiceRole Full Access ManagerAuditLogs" ON ManagerAuditLogs
+    FOR ALL USING (auth.role() = 'service_role');
+
+-- DEV-8: Add guest and machine tracking to Sessions
+ALTER TABLE Sessions ADD COLUMN GuestName TEXT DEFAULT 'Walk-in Guest';
+ALTER TABLE Sessions ADD COLUMN MachineId UUID REFERENCES ArcadeMachines(Id);
+
+-- DEV-8: Digital Receipts
+CREATE TABLE DigitalReceipts (
+    Id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    SessionId UUID REFERENCES Sessions(Id) NOT NULL UNIQUE,
+    ReceiptNumber TEXT UNIQUE NOT NULL,
+    RfidTagId UUID REFERENCES RfidTags(Id) NOT NULL,
+    GuestName TEXT NOT NULL DEFAULT 'Walk-in Guest',
+    MachineName TEXT,
+    CheckInTime TIMESTAMPTZ NOT NULL,
+    CheckOutTime TIMESTAMPTZ NOT NULL,
+    DurationMinutes INT NOT NULL,
+    Fee DECIMAL(10,2) NOT NULL,
+    StaffName TEXT NOT NULL,
+    IssuedAt TIMESTAMPTZ DEFAULT NOW(),
+    Status TEXT CHECK (Status IN ('Issued', 'Voided')) DEFAULT 'Issued'
+);
+
+CREATE UNIQUE INDEX idx_unique_receipt_session ON DigitalReceipts(SessionId);
+
+ALTER TABLE DigitalReceipts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "ServiceRole Full Access DigitalReceipts" ON DigitalReceipts
+    FOR ALL USING (auth.role() = 'service_role');
+>>>>>>> Stashed changes

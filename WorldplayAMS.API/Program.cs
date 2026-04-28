@@ -25,7 +25,12 @@ builder.Services.AddSingleton(provider => new Supabase.Client(supabaseUrl, supab
 builder.Services.AddScoped<IFallbackCacheService, FallbackCacheService>();
 builder.Services.AddScoped<SessionManagerService>();
 builder.Services.AddScoped<MachineMonitoringService>();
+<<<<<<< Updated upstream
 builder.Services.AddScoped<IGameSessionService, GameSessionService>();
+=======
+builder.Services.AddScoped<TransactionHistoryService>();
+builder.Services.AddScoped<DigitalReceiptService>();
+>>>>>>> Stashed changes
 builder.Services.AddScoped<IRfidReaderService, RfidReaderService>();
 
 var app = builder.Build();
@@ -77,7 +82,11 @@ app.MapGet("/api/rfid/{tagUid}", async (string tagUid, IRfidReaderService rfidSe
 
 app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionManagerService sessionService) =>
 {
+<<<<<<< Updated upstream
     var result = await sessionService.ProcessRfidTapAsync(request.TagString);
+=======
+    var result = await sessionService.ProcessRfidTapAsync(request.TagString, request.StaffName, request.GuestName, request.MachineId);
+>>>>>>> Stashed changes
     return Results.Ok(result);
 })
 .WithName("ProcessTap")
@@ -159,9 +168,92 @@ app.MapPost("/api/seed", async (Supabase.Client client) =>
     return Results.Ok(logs);
 });
 
+<<<<<<< Updated upstream
 app.Run();
 
 // DTOs
 public record StartSessionDto(string TagUid, Guid MachineId);
 public record ProcessTapDto(string TagString);
+=======
+// DEV-13: Transaction History & Audit Endpoints
+
+app.MapGet("/api/transactions", async (DateTime? from, DateTime? to, TransactionHistoryService txnService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date;
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await txnService.GetTransactionsByDateRangeAsync(fromDate, toDate);
+    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.EndTime, s.Status, s.TotalDurationMinutes, s.Fee, s.CheckedOutByStaff });
+    return Results.Ok(dtos);
+})
+.WithName("GetTransactions")
+.WithOpenApi();
+
+app.MapGet("/api/transactions/summary", async (DateTime? date, TransactionHistoryService txnService) =>
+{
+    var targetDate = date ?? DateTime.UtcNow.Date;
+    var result = await txnService.GetDailyReconciliationSummaryAsync(targetDate);
+    return Results.Ok(result);
+})
+.WithName("GetTransactionSummary")
+.WithOpenApi();
+
+app.MapPost("/api/audit/log", async (AuditLogDto request, TransactionHistoryService txnService) =>
+{
+    await txnService.LogManagerActionAsync(request.ManagerName, request.Action, request.Details);
+    return Results.Ok("Audit log recorded.");
+})
+.WithName("PostAuditLog")
+.WithOpenApi();
+
+app.MapGet("/api/audit/logs", async (int? limit, TransactionHistoryService txnService) =>
+{
+    var result = await txnService.GetManagerAuditLogsAsync(limit ?? 50);
+    var dtos = result.Select(l => new { l.Id, l.ManagerName, l.Action, l.Details, l.Timestamp });
+    return Results.Ok(dtos);
+})
+.WithName("GetAuditLogs")
+.WithOpenApi();
+
+// DEV-8: Digital Receipt Endpoints
+
+app.MapGet("/api/receipts", async (DateTime? from, DateTime? to, DigitalReceiptService receiptService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date;
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await receiptService.GetReceiptsByDateRangeAsync(fromDate, toDate);
+    var dtos = result.Select(r => new { r.Id, r.SessionId, r.ReceiptNumber, r.RfidTagId,
+        r.GuestName, r.MachineName, r.CheckInTime, r.CheckOutTime, r.DurationMinutes,
+        r.Fee, r.StaffName, r.IssuedAt, r.Status });
+    return Results.Ok(dtos);
+})
+.WithName("GetReceipts")
+.WithOpenApi();
+
+app.MapGet("/api/receipts/search", async (string? q, DigitalReceiptService receiptService) =>
+{
+    var query = q ?? "";
+    var result = await receiptService.SearchReceiptsAsync(query);
+    var dtos = result.Select(r => new { r.Id, r.SessionId, r.ReceiptNumber, r.RfidTagId,
+        r.GuestName, r.MachineName, r.Fee, r.IssuedAt, r.Status });
+    return Results.Ok(dtos);
+})
+.WithName("SearchReceipts")
+.WithOpenApi();
+
+app.MapGet("/api/receipts/{sessionId}", async (Guid sessionId, DigitalReceiptService receiptService) =>
+{
+    var result = await receiptService.GetReceiptBySessionAsync(sessionId);
+    if (result == null) return Results.NotFound("No receipt found for this session.");
+    return Results.Ok(new { result.Id, result.SessionId, result.ReceiptNumber, result.RfidTagId,
+        result.GuestName, result.MachineName, result.CheckInTime, result.CheckOutTime,
+        result.DurationMinutes, result.Fee, result.StaffName, result.IssuedAt, result.Status });
+})
+.WithName("GetReceiptBySession")
+.WithOpenApi();
+
+app.Run();
+
+// DTOs
+public record ProcessTapDto(string TagString, string? StaffName = null, string? GuestName = null, Guid? MachineId = null);
+>>>>>>> Stashed changes
 public record ToggleMachineDto(Guid MachineId);
