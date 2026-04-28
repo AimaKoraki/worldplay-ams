@@ -2,6 +2,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @inject IHttpClientFactory ClientFactory
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Worldplay AMS — Digital Receipts</PageTitle>
 
@@ -142,6 +143,9 @@
                     <span class="bi bi-file-earmark-text text-cyan"></span> Receipt Detail
                 </h3>
                 <div style="display:flex; gap:0.5rem;">
+                    <button class="btn-neon btn-neon-cyan" style="font-size:0.75rem; padding:0.4rem 0.8rem;" @onclick="CopyPublicLink">
+                        <span class="bi bi-link-45deg"></span> Link
+                    </button>
                     <button class="btn-neon btn-neon-green" style="font-size:0.75rem; padding:0.4rem 0.8rem;" @onclick="DownloadPdf">
                         <span class="bi bi-download"></span> PDF
                     </button>
@@ -453,6 +457,13 @@
     private async Task QuickWeek() => await SetQuickFilter("week");
     private async Task QuickMonth() => await SetQuickFilter("month");
     private string QuickBtnClass(string mode) => activeQuick == mode ? "btn-quick-active" : "";
+
+    private async Task CopyPublicLink()
+    {
+        if (selectedReceipt == null) return;
+        var url = $"{Nav.BaseUri}r/{selectedReceipt.SessionId}";
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", url);
+    }
 
     private void DownloadPdf()
     {
