@@ -82,11 +82,7 @@ app.MapGet("/api/rfid/{tagUid}", async (string tagUid, IRfidReaderService rfidSe
 
 app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionManagerService sessionService) =>
 {
-<<<<<<< Updated upstream
-    var result = await sessionService.ProcessRfidTapAsync(request.TagString);
-=======
     var result = await sessionService.ProcessRfidTapAsync(request.TagString, request.StaffName, request.GuestName, request.MachineId);
->>>>>>> Stashed changes
     return Results.Ok(result);
 })
 .WithName("ProcessTap")
@@ -94,7 +90,7 @@ app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionMa
 
 app.MapPost("/api/machines/toggle", async (ToggleMachineDto request, MachineMonitoringService machineService) =>
 {
-    var result = await machineService.ProcessMachineToggleAsync(request.MachineId);
+    var result = await machineService.ProcessMachineToggleAsync(request.MachineId, request.TechnicianName);
     return Results.Ok(result);
 })
 .WithName("ToggleMachine")
@@ -255,5 +251,5 @@ app.Run();
 
 // DTOs
 public record ProcessTapDto(string TagString, string? StaffName = null, string? GuestName = null, Guid? MachineId = null);
->>>>>>> Stashed changes
-public record ToggleMachineDto(Guid MachineId);
+public record ToggleMachineDto(Guid MachineId, string TechnicianName = "Unknown Technician");
+public record AuditLogDto(string ManagerName, string Action, string? Details = null);
