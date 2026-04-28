@@ -43,4 +43,13 @@ public class Session : BaseModel
 
     [Column("fee")]
     public decimal? Fee { get; set; }
+
+    [Column("checkedoutbystaff")]
+    public string? CheckedOutByStaff { get; set; }
+
+    [Column("guestname")]
+    public string GuestName { get; set; } = "Walk-in Guest";
+
+    [Column("machineid")]
+    public Guid? MachineId { get; set; }
 }

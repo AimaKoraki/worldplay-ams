@@ -1,0 +1,309 @@
+@page "/r/{SessionId:guid}"
+@layout Layout.EmptyLayout
+@inject IHttpClientFactory ClientFactory
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Worldplay AMS — Digital Receipt</PageTitle>
+
+<div class="receipt-container">
+    @if (isLoading)
+    {
+        <div class="receipt-loading">
+            <div class="spinner-border text-neon-cyan" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Retrieving your receipt...</p>
+        </div>
+    }
+    else if (receipt == null)
+    {
+        <div class="receipt-error glass-card">
+            <span class="bi bi-exclamation-triangle text-warning mb-2" style="font-size: 2rem;"></span>
+            <h3>Receipt Not Found</h3>
+            <p>We couldn't find a receipt for this session. The session may still be active or the link might be invalid.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Action bar (hidden when printing) -->
+        <div class="receipt-actions no-print mb-3">
+            <button class="btn-neon btn-primary-action" @onclick="PrintReceipt">
+                <span class="bi bi-printer me-2"></span> Print / Save PDF
+            </button>
+        </div>
+
+        <!-- Receipt Tape -->
+        <div class="receipt-tape">
+            <div class="receipt-header">
+                <div class="receipt-logo">
+                    <span class="bi bi-controller"></span>
+                </div>
+                <h2>WORLDPLAY</h2>
+                <p>Arcade Management System</p>
+                <div class="receipt-meta">
+                    <span>Receipt #: @receipt.ReceiptNumber</span>
+                    <span>Date: @receipt.IssuedAt.ToLocalTime().ToString("MMM dd, yyyy")</span>
+                </div>
+            </div>
+
+            <div class="receipt-divider"></div>
+
+            <div class="receipt-body">
+                <div class="receipt-row">
+                    <span class="r-label">Guest</span>
+                    <span class="r-value">@receipt.GuestName</span>
+                </div>
+                <div class="receipt-row">
+                    <span class="r-label">Machine</span>
+                    <span class="r-value">@(receipt.MachineName ?? "Walk-in Facility")</span>
+                </div>
+                
+                <div class="receipt-timeline mt-3">
+                    <div class="time-block">
+                        <span class="time-lbl">Check In</span>
+                        <span class="time-val">@receipt.CheckInTime.ToLocalTime().ToString("hh:mm tt")</span>
+                    </div>
+                    <div class="time-arrow">
+                        <span class="bi bi-arrow-right"></span>
+                    </div>
+                    <div class="time-block text-end">
+                        <span class="time-lbl">Check Out</span>
+                        <span class="time-val">@receipt.CheckOutTime.ToLocalTime().ToString("hh:mm tt")</span>
+                    </div>
+                </div>
+
+                <div class="receipt-row mt-3">
+                    <span class="r-label">Duration</span>
+                    <span class="r-value">@receipt.DurationMinutes min</span>
+                </div>
+            </div>
+
+            <div class="receipt-divider border-dashed"></div>
+
+            <div class="receipt-footer">
+                <div class="receipt-total">
+                    <span class="total-lbl">TOTAL FEE</span>
+                    <span class="total-val">LKR @receipt.Fee.ToString("N2")</span>
+                </div>
+                <p class="receipt-staff mt-3 text-muted" style="font-size: 0.8rem;">
+                    Served by: @receipt.StaffName
+                </p>
+            </div>
+
+            <div class="receipt-barcode mt-4">
+                <!-- Decorative barcode -->
+                <div class="barcode-lines"></div>
+                <span class="barcode-text">@receipt.SessionId.ToString().ToUpper().Substring(0, 18)</span>
+            </div>
+            
+            <p class="receipt-thankyou">Thank you for playing!</p>
+        </div>
+    }
+</div>
+
+<style>
+    .receipt-container {
+        width: 100%;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    .receipt-loading, .receipt-error {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--text-secondary);
+    }
+
+    .receipt-actions {
+        display: flex;
+        justify-content: center;
+    }
+
+    .receipt-tape {
+        background: #fff;
+        color: #1a1a2e;
+        padding: 2.5rem 2rem;
+        border-radius: 4px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        position: relative;
+    }
+
+    /* Sawtooth top and bottom */
+    .receipt-tape::before, .receipt-tape::after {
+        content: "";
+        position: absolute;
+        left: 0; right: 0;
+        height: 10px;
+        background-size: 20px 20px;
+    }
+    .receipt-tape::before {
+        top: -5px;
+        background-image: radial-gradient(circle at 10px 0, transparent 11px, #fff 12px);
+    }
+    .receipt-tape::after {
+        bottom: -5px;
+        background-image: radial-gradient(circle at 10px 20px, transparent 11px, #fff 12px);
+    }
+
+    .receipt-header {
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .receipt-logo {
+        font-size: 2.5rem;
+        color: #1a1a2e;
+        margin-bottom: 0.5rem;
+    }
+
+    .receipt-header h2 {
+        font-family: var(--font-heading);
+        font-weight: 800;
+        font-size: 1.5rem;
+        margin-bottom: 0.2rem;
+        letter-spacing: 2px;
+    }
+
+    .receipt-header p {
+        font-size: 0.85rem;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 1rem;
+    }
+
+    .receipt-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 0.8rem;
+        color: #666;
+        font-family: monospace;
+    }
+
+    .receipt-divider {
+        height: 2px;
+        background: #1a1a2e;
+        margin: 1.5rem 0;
+    }
+    .receipt-divider.border-dashed {
+        background: transparent;
+        border-top: 2px dashed #1a1a2e;
+    }
+
+    .receipt-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+    }
+    .r-label { color: #555; }
+    .r-value { font-weight: 600; text-align: right; }
+
+    .receipt-timeline {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f4f4f8;
+        padding: 0.8rem;
+        border-radius: 6px;
+    }
+    .time-block { display: flex; flex-direction: column; }
+    .time-lbl { font-size: 0.7rem; color: #777; text-transform: uppercase; margin-bottom: 0.2rem; }
+    .time-val { font-weight: 600; font-size: 0.9rem; }
+    .time-arrow { color: #ccc; }
+
+    .receipt-total {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .total-lbl { font-size: 1.1rem; font-weight: 800; letter-spacing: 1px; }
+    .total-val { font-size: 1.4rem; font-weight: 800; }
+
+    .receipt-barcode {
+        text-align: center;
+    }
+    .barcode-lines {
+        height: 40px;
+        background-image: repeating-linear-gradient(to right, #1a1a2e 0, #1a1a2e 3px, transparent 3px, transparent 5px, #1a1a2e 5px, #1a1a2e 6px, transparent 6px, transparent 10px, #1a1a2e 10px, #1a1a2e 14px, transparent 14px, transparent 16px);
+        margin-bottom: 0.5rem;
+        opacity: 0.8;
+    }
+    .barcode-text {
+        font-family: monospace;
+        font-size: 0.75rem;
+        color: #555;
+    }
+
+    .receipt-thankyou {
+        text-align: center;
+        margin-top: 2rem;
+        font-family: var(--font-heading);
+        font-style: italic;
+        color: #555;
+        font-weight: 600;
+    }
+
+    /* Print styles */
+    @@media print {
+        body { background: #fff !important; }
+        .empty-layout { padding: 0 !important; background: #fff !important; }
+        .no-print { display: none !important; }
+        .receipt-tape {
+            box-shadow: none !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+        .receipt-tape::before, .receipt-tape::after { display: none !important; }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    private DigitalReceiptDto? receipt;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            receipt = await client.GetFromJsonAsync<DigitalReceiptDto>($"/api/receipts/{SessionId}");
+        }
+        catch
+        {
+            receipt = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task PrintReceipt()
+    {
+        await JSRuntime.InvokeVoidAsync("window.print");
+    }
+
+    private class DigitalReceiptDto
+    {
+        public Guid Id { get; set; }
+        public Guid SessionId { get; set; }
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public Guid RfidTagId { get; set; }
+        public string GuestName { get; set; } = string.Empty;
+        public string? MachineName { get; set; }
+        public DateTime CheckInTime { get; set; }
+        public DateTime CheckOutTime { get; set; }
+        public int DurationMinutes { get; set; }
+        public decimal Fee { get; set; }
+        public string StaffName { get; set; } = string.Empty;
+        public DateTime IssuedAt { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
+}

@@ -416,3 +416,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+<<<<<<< Updated upstream
+=======
+Agents.md
+Dev08_implementation_plan
+>>>>>>> Stashed changes
+*.md

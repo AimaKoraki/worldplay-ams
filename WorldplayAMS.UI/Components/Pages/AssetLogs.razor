@@ -73,7 +73,7 @@
                             <span class="bi @(isActive ? "bi-broadcast" : "bi-check-circle-fill")"></span>
                         </div>
                         <div class="log-title-block">
-                            <h3 class="log-name">NODE-@log.MachineId.ToString().Substring(0, 6).ToUpper()</h3>
+                            <h3 class="log-name">@GetMachineName(log.MachineId)</h3>
                             <span class="badge-neon @(isActive ? "logging" : "active")">
                                 <span class="bi @(isActive ? "bi-record-circle-fill" : "bi-check-lg")"></span>
                                 @log.Status
@@ -238,6 +238,7 @@
 
 @code {
     private List<UsageLogDto> logs = new();
+    private List<MachineDto> machines = new();
     private bool isLoading = true;
     private int totalUptime = 0;
 
@@ -252,15 +253,27 @@
         var client = ClientFactory.CreateClient("ApiClient");
         try
         {
-            var result = await client.GetFromJsonAsync<List<UsageLogDto>>("/api/machines/logs");
-            logs = result ?? new();
+            var machinesTask = client.GetFromJsonAsync<List<MachineDto>>("/api/machines");
+            var logsTask = client.GetFromJsonAsync<List<UsageLogDto>>("/api/machines/logs");
+            
+            await Task.WhenAll(machinesTask, logsTask);
+            
+            machines = machinesTask.Result ?? new();
+            logs = logsTask.Result ?? new();
             totalUptime = logs.Sum(l => l.DurationMinutes ?? 0);
         }
         catch
         {
             logs = new();
+            machines = new();
         }
         isLoading = false;
+    }
+
+    private string GetMachineName(Guid machineId)
+    {
+        var machine = machines.FirstOrDefault(m => m.Id == machineId);
+        return machine?.Name ?? $"NODE-{machineId.ToString().Substring(0, 6).ToUpper()}";
     }
 
     private class UsageLogDto
@@ -271,5 +284,11 @@
         public DateTime? EndTime { get; set; }
         public int? DurationMinutes { get; set; }
         public string Status { get; set; } = string.Empty;
+    }
+
+    private class MachineDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
 }

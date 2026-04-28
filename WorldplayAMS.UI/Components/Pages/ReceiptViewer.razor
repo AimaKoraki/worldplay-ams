@@ -1,0 +1,523 @@
+@page "/receipts"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject IHttpClientFactory ClientFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Worldplay AMS — Digital Receipts</PageTitle>
+
+<div class="rcpt-wrap">
+
+    <!-- Page Header -->
+    <div class="rcpt-header">
+        <div>
+            <h1 class="rcpt-title">
+                <span class="bi bi-file-earmark-text me-3" style="color:var(--neon-cyan);"></span>Digital Receipts
+            </h1>
+            <p class="rcpt-subtitle">Manager receipt viewer &amp; reconciliation</p>
+        </div>
+        <div class="header-actions-row">
+            <button id="btn-refresh-receipts" class="btn-neon btn-neon-cyan" @onclick="RefreshAll">
+                <span class="bi bi-arrow-repeat"></span> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar glass-card" style="padding:1rem 1.5rem;">
+        <div class="filter-group">
+            <label class="filter-label">From</label>
+            <input id="input-rcpt-from" type="date" class="form-input filter-date" @bind="dateFrom" />
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">To</label>
+            <input id="input-rcpt-to" type="date" class="form-input filter-date" @bind="dateTo" />
+        </div>
+        <div class="filter-quick-btns">
+            <button class="btn-neon btn-quick @QuickBtnClass("today")" @onclick="QuickToday">Today</button>
+            <button class="btn-neon btn-quick @QuickBtnClass("week")" @onclick="QuickWeek">This Week</button>
+            <button class="btn-neon btn-quick @QuickBtnClass("month")" @onclick="QuickMonth">This Month</button>
+        </div>
+        <div class="filter-search-wrap">
+            <span class="bi bi-search filter-search-icon"></span>
+            <input id="input-rcpt-search" type="text" class="form-input filter-search" placeholder="Search receipt #, guest, or machine..." @bind="searchQuery" @bind:event="oninput" />
+        </div>
+        <button id="btn-apply-rcpt-filter" class="btn-primary-action btn-apply" @onclick="ApplyFilter">
+            <span class="bi bi-funnel-fill"></span> Apply
+        </button>
+    </div>
+
+    <!-- KPI Summary -->
+    <div class="rcpt-kpi-grid">
+        <div class="recon-card">
+            <div class="recon-accent recon-accent-cyan"></div>
+            <div class="recon-body">
+                <div class="recon-icon-wrap recon-icon-cyan"><span class="bi bi-file-earmark-check"></span></div>
+                <div class="recon-data">
+                    <span class="recon-value">@filteredReceipts.Count</span>
+                    <span class="recon-label">Receipts</span>
+                </div>
+            </div>
+        </div>
+        <div class="recon-card">
+            <div class="recon-accent recon-accent-green"></div>
+            <div class="recon-body">
+                <div class="recon-icon-wrap recon-icon-green"><span class="bi bi-cash-coin"></span></div>
+                <div class="recon-data">
+                    <span class="recon-value">LKR @filteredReceipts.Sum(r => r.Fee).ToString("F2")</span>
+                    <span class="recon-label">Total Revenue</span>
+                </div>
+            </div>
+        </div>
+        <div class="recon-card">
+            <div class="recon-accent recon-accent-amber"></div>
+            <div class="recon-body">
+                <div class="recon-icon-wrap recon-icon-amber"><span class="bi bi-people-fill"></span></div>
+                <div class="recon-data">
+                    <span class="recon-value">@filteredReceipts.Select(r => r.GuestName).Distinct().Count()</span>
+                    <span class="recon-label">Unique Guests</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Cards Grid -->
+    @if (isLoading)
+    {
+        <div class="empty-state-full">
+            <span class="bi bi-arrow-repeat rotating" style="font-size:2.5rem; color:var(--neon-cyan);"></span>
+            <p class="mt-3">Loading receipts...</p>
+        </div>
+    }
+    else if (!filteredReceipts.Any())
+    {
+        <div class="glass-card empty-state-full">
+            <span class="bi bi-receipt" style="font-size:3rem; color:var(--text-disabled);"></span>
+            <h3 class="mt-3 text-white">No Receipts Found</h3>
+            <p class="mt-1 text-muted-custom">Adjust the date range or search to find receipts.</p>
+        </div>
+    }
+    else
+    {
+        <div class="rcpt-grid">
+            @foreach (var r in filteredReceipts)
+            {
+                <div class="rcpt-card glass-card" @onclick="() => SelectReceipt(r)">
+                    <div class="rcpt-card-top">
+                        <span class="rcpt-number">@r.ReceiptNumber</span>
+                        <span class="badge-neon @(r.Status == "Issued" ? "active" : "error")">@r.Status</span>
+                    </div>
+                    <div class="rcpt-card-body">
+                        <div class="rcpt-card-field">
+                            <span class="bi bi-person-fill rcpt-field-icon"></span>
+                            <span>@r.GuestName</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(r.MachineName))
+                        {
+                            <div class="rcpt-card-field">
+                                <span class="bi bi-joystick rcpt-field-icon"></span>
+                                <span>@r.MachineName</span>
+                            </div>
+                        }
+                        <div class="rcpt-card-field">
+                            <span class="bi bi-clock rcpt-field-icon"></span>
+                            <span>@r.DurationMinutes min</span>
+                        </div>
+                    </div>
+                    <div class="rcpt-card-footer">
+                        <span class="rcpt-fee">LKR @r.Fee.ToString("F2")</span>
+                        <span class="rcpt-date">@r.IssuedAt.ToLocalTime().ToString("MMM dd, HH:mm")</span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Receipt Detail Panel -->
+    @if (selectedReceipt != null)
+    {
+        <div class="rcpt-overlay" @onclick="CloseDetail"></div>
+        <div class="rcpt-detail-panel glass-card">
+            <div class="rcpt-detail-header">
+                <h3 class="rcpt-detail-title">
+                    <span class="bi bi-file-earmark-text text-cyan"></span> Receipt Detail
+                </h3>
+                <div style="display:flex; gap:0.5rem;">
+                    <button class="btn-neon btn-neon-cyan" style="font-size:0.75rem; padding:0.4rem 0.8rem;" @onclick="CopyPublicLink">
+                        <span class="bi bi-link-45deg"></span> Link
+                    </button>
+                    <button class="btn-neon btn-neon-green" style="font-size:0.75rem; padding:0.4rem 0.8rem;" @onclick="DownloadPdf">
+                        <span class="bi bi-download"></span> PDF
+                    </button>
+                    <button class="btn-neon btn-neon-red btn-sm" @onclick="CloseDetail">
+                        <span class="bi bi-x-lg"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Branded receipt -->
+            <div class="receipt-paper">
+                <div class="receipt-brand">
+                    <div class="receipt-logo"><span class="bi bi-controller"></span></div>
+                    <div>
+                        <h2 class="receipt-brand-name">Worldplay</h2>
+                        <p class="receipt-brand-sub">Arcade Management System</p>
+                    </div>
+                </div>
+
+                <div class="receipt-divider"></div>
+
+                <div class="receipt-number-row">
+                    <span class="receipt-num-label">RECEIPT</span>
+                    <span class="receipt-num-value">@selectedReceipt.ReceiptNumber</span>
+                </div>
+
+                <div class="receipt-divider"></div>
+
+                <div class="receipt-field-grid">
+                    <div class="receipt-field">
+                        <span class="receipt-field-label">Guest Name</span>
+                        <span class="receipt-field-value">@selectedReceipt.GuestName</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(selectedReceipt.MachineName))
+                    {
+                        <div class="receipt-field">
+                            <span class="receipt-field-label">Machine Used</span>
+                            <span class="receipt-field-value">@selectedReceipt.MachineName</span>
+                        </div>
+                    }
+                    <div class="receipt-field">
+                        <span class="receipt-field-label">RFID Tag</span>
+                        <span class="receipt-field-value font-mono">@selectedReceipt.RfidTagId.ToString()[..8].ToUpper()</span>
+                    </div>
+                    <div class="receipt-field">
+                        <span class="receipt-field-label">Session ID</span>
+                        <span class="receipt-field-value font-mono">@selectedReceipt.SessionId.ToString()[..8].ToUpper()</span>
+                    </div>
+                    <div class="receipt-field">
+                        <span class="receipt-field-label">Check-In</span>
+                        <span class="receipt-field-value">@selectedReceipt.CheckInTime.ToLocalTime().ToString("MMM dd yyyy, HH:mm")</span>
+                    </div>
+                    <div class="receipt-field">
+                        <span class="receipt-field-label">Check-Out</span>
+                        <span class="receipt-field-value">@selectedReceipt.CheckOutTime.ToLocalTime().ToString("MMM dd yyyy, HH:mm")</span>
+                    </div>
+                    <div class="receipt-field">
+                        <span class="receipt-field-label">Duration</span>
+                        <span class="receipt-field-value">@selectedReceipt.DurationMinutes min</span>
+                    </div>
+                    <div class="receipt-field">
+                        <span class="receipt-field-label">Processed By</span>
+                        <span class="receipt-field-value">@selectedReceipt.StaffName</span>
+                    </div>
+                </div>
+
+                <div class="receipt-divider"></div>
+
+                <div class="receipt-total-row">
+                    <span>TOTAL</span>
+                    <span class="receipt-total-value">LKR @selectedReceipt.Fee.ToString("F2")</span>
+                </div>
+
+                <div class="receipt-divider"></div>
+
+                <div class="receipt-footer-info">
+                    <span class="badge-neon @(selectedReceipt.Status == "Issued" ? "active" : "error")">
+                        <span class="bi @(selectedReceipt.Status == "Issued" ? "bi-check-circle-fill" : "bi-x-circle-fill")"></span>
+                        @selectedReceipt.Status
+                    </span>
+                    <span class="receipt-issued-at">Issued: @selectedReceipt.IssuedAt.ToLocalTime().ToString("MMM dd yyyy, HH:mm:ss")</span>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .rcpt-wrap { padding-bottom: 2rem; }
+
+    .rcpt-header {
+        display: flex; align-items: flex-end; justify-content: space-between;
+        gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem;
+    }
+    .rcpt-title {
+        font-size: 1.75rem; font-weight: 800; margin: 0;
+        background: linear-gradient(135deg, #fff 40%, var(--neon-cyan) 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        display: flex; align-items: center;
+    }
+    .rcpt-subtitle { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.3rem; }
+    .header-actions-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+    /* Filter bar — reuse TransactionHistory patterns */
+    .filter-bar { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.75rem; animation: slideUp 0.4s ease; }
+    .filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .filter-label { font-family: var(--font-heading); font-size: 0.66rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-secondary); }
+    .filter-date { width: 160px; font-size: 0.85rem; padding: 0.6rem 0.8rem; }
+    .filter-quick-btns { display: flex; gap: 0.5rem; }
+    .btn-quick { font-size: 0.75rem; padding: 0.5rem 0.9rem; border-color: var(--surface-border-strong); color: var(--text-secondary); border-radius: 100px; transition: all 0.25s; }
+    .btn-quick:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+    .btn-quick-active { background: rgba(0,240,255,0.1) !important; border-color: var(--neon-cyan) !important; color: var(--neon-cyan) !important; box-shadow: 0 0 12px rgba(0,240,255,0.15); }
+    .filter-search-wrap { flex: 1; min-width: 200px; position: relative; }
+    .filter-search-icon { position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-disabled); font-size: 0.85rem; pointer-events: none; }
+    .filter-search { padding-left: 2.4rem; font-size: 0.85rem; }
+    .btn-apply { padding: 0.65rem 1.2rem; font-size: 0.82rem; white-space: nowrap; }
+
+    /* KPI row */
+    .rcpt-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-bottom: 1.75rem; animation: slideUp 0.5s ease; }
+    @@media (max-width: 800px) { .rcpt-kpi-grid { grid-template-columns: 1fr; } }
+
+    /* Receipt cards grid */
+    .rcpt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.25rem; animation: slideUp 0.5s ease; }
+
+    .rcpt-card {
+        cursor: pointer; padding: 0; overflow: hidden;
+        transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+        border-color: var(--surface-border);
+    }
+    .rcpt-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(0,240,255,0.35);
+        box-shadow: var(--shadow-card), 0 0 20px rgba(0,240,255,0.1);
+    }
+
+    .rcpt-card-top {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 1rem 1.25rem 0.75rem;
+        border-bottom: 1px solid var(--surface-border);
+    }
+    .rcpt-number {
+        font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700;
+        color: var(--neon-cyan); letter-spacing: 0.5px;
+    }
+
+    .rcpt-card-body { padding: 0.85rem 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .rcpt-card-field { display: flex; align-items: center; gap: 0.6rem; font-size: 0.82rem; color: var(--text-secondary); }
+    .rcpt-field-icon { color: var(--text-disabled); font-size: 0.85rem; width: 18px; text-align: center; }
+
+    .rcpt-card-footer {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.75rem 1.25rem;
+        background: rgba(0,0,0,0.2);
+        border-top: 1px solid var(--surface-border);
+    }
+    .rcpt-fee { font-family: var(--font-heading); font-weight: 700; font-size: 1.1rem; color: var(--status-active); }
+    .rcpt-date { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-disabled); }
+
+    /* Empty state */
+    .empty-state-full { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 280px; text-align: center; color: var(--text-secondary); }
+
+    /* Detail panel */
+    .rcpt-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 900; animation: fadeIn 0.2s ease; }
+    .rcpt-detail-panel {
+        position: fixed; top: 0; right: 0; bottom: 0; width: 480px; max-width: 95vw;
+        z-index: 910; border-radius: 0; border-left: 1px solid var(--surface-border-strong);
+        overflow-y: auto; animation: slideInRight 0.3s ease; padding: 1.5rem;
+    }
+    .rcpt-detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--surface-border); }
+    .rcpt-detail-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+    .btn-sm { padding: 0.4rem 0.6rem; font-size: 0.75rem; }
+
+    /* Receipt paper */
+    .receipt-paper {
+        background: rgba(255,255,255,0.03); border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md); padding: 2rem 1.75rem;
+    }
+    .receipt-brand { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+    .receipt-logo {
+        width: 48px; height: 48px; border-radius: 12px;
+        background: linear-gradient(135deg, var(--neon-purple), var(--neon-cyan));
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; color: #fff; box-shadow: 0 0 16px rgba(157,0,255,0.4);
+    }
+    .receipt-brand-name { font-size: 1.3rem; font-weight: 800; color: var(--text-primary); margin: 0; }
+    .receipt-brand-sub { font-size: 0.72rem; color: var(--text-secondary); margin: 0; }
+
+    .receipt-divider { height: 1px; background: var(--surface-border); margin: 1rem 0; }
+
+    .receipt-number-row { display: flex; align-items: center; justify-content: space-between; }
+    .receipt-num-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-disabled); }
+    .receipt-num-value { font-family: var(--font-mono); font-size: 1.1rem; font-weight: 700; color: var(--neon-cyan); letter-spacing: 1px; }
+
+    .receipt-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .receipt-field { display: flex; flex-direction: column; gap: 0.2rem; }
+    .receipt-field-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-disabled); }
+    .receipt-field-value { font-size: 0.88rem; color: var(--text-primary); font-weight: 500; }
+
+    .receipt-total-row { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; }
+    .receipt-total-row > span:first-child { font-size: 0.7rem; font-weight: 700; letter-spacing: 2px; color: var(--text-disabled); }
+    .receipt-total-value { font-family: var(--font-heading); font-size: 1.6rem; font-weight: 800; color: var(--status-active); text-shadow: 0 0 16px rgba(0,230,118,0.3); }
+
+    .receipt-footer-info { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+    .receipt-issued-at { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-disabled); }
+
+    @@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+</style>
+
+@code {
+    private List<ReceiptDto> allReceipts = new();
+    private List<ReceiptDto> filteredReceipts = new();
+    private ReceiptDto? selectedReceipt;
+    private DateTime dateFrom = DateTime.UtcNow.Date;
+    private DateTime dateTo = DateTime.UtcNow.Date;
+    private string searchQuery = string.Empty;
+    private string activeQuick = "today";
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check for ?session= query param (deep link from TransactionHistory)
+        var uri = new Uri(Nav.Uri);
+        var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var sessionParam = queryParams["session"];
+
+        await RefreshAll();
+
+        if (!string.IsNullOrEmpty(sessionParam) && Guid.TryParse(sessionParam, out var sessionId))
+        {
+            await LoadSingleReceipt(sessionId);
+        }
+    }
+
+    private async Task LoadSingleReceipt(Guid sessionId)
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            var result = await client.GetFromJsonAsync<ReceiptDto>($"/api/receipts/{sessionId}");
+            if (result != null) selectedReceipt = result;
+        }
+        catch { /* silent */ }
+    }
+
+    private async Task RefreshAll()
+    {
+        isLoading = true;
+        await LoadReceipts();
+        ApplySearchFilter();
+        isLoading = false;
+    }
+
+    private async Task ApplyFilter()
+    {
+        activeQuick = "";
+        isLoading = true;
+        await LoadReceipts();
+        ApplySearchFilter();
+        isLoading = false;
+    }
+
+    private async Task LoadReceipts()
+    {
+        var client = ClientFactory.CreateClient("ApiClient");
+        try
+        {
+            var from = dateFrom.ToString("yyyy-MM-dd");
+            var to = dateTo.AddDays(1).AddTicks(-1).ToString("o");
+            var result = await client.GetFromJsonAsync<List<ReceiptDto>>($"/api/receipts?from={from}&to={to}");
+            allReceipts = result ?? new();
+        }
+        catch { allReceipts = new(); }
+    }
+
+    private void ApplySearchFilter()
+    {
+        var query = searchQuery?.Trim().ToLowerInvariant() ?? "";
+        filteredReceipts = string.IsNullOrEmpty(query)
+            ? allReceipts
+            : allReceipts.Where(r =>
+                r.ReceiptNumber.ToLowerInvariant().Contains(query) ||
+                r.GuestName.ToLowerInvariant().Contains(query) ||
+                (r.MachineName ?? "").ToLowerInvariant().Contains(query) ||
+                r.StaffName.ToLowerInvariant().Contains(query)
+            ).ToList();
+    }
+
+    private void SelectReceipt(ReceiptDto receipt) { selectedReceipt = receipt; }
+    private void CloseDetail() { selectedReceipt = null; }
+
+    private async Task SetQuickFilter(string mode)
+    {
+        activeQuick = mode;
+        dateTo = DateTime.UtcNow.Date;
+        dateFrom = mode switch
+        {
+            "today" => DateTime.UtcNow.Date,
+            "week" => DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.DayOfWeek),
+            "month" => new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1),
+            _ => DateTime.UtcNow.Date
+        };
+        isLoading = true;
+        await LoadReceipts();
+        ApplySearchFilter();
+        isLoading = false;
+    }
+
+    private async Task QuickToday() => await SetQuickFilter("today");
+    private async Task QuickWeek() => await SetQuickFilter("week");
+    private async Task QuickMonth() => await SetQuickFilter("month");
+    private string QuickBtnClass(string mode) => activeQuick == mode ? "btn-quick-active" : "";
+
+    private async Task CopyPublicLink()
+    {
+        if (selectedReceipt == null) return;
+        var url = $"{Nav.BaseUri}r/{selectedReceipt.SessionId}";
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", url);
+    }
+
+    private void DownloadPdf()
+    {
+        if (selectedReceipt == null) return;
+        var r = selectedReceipt;
+        var machine = r.MachineName ?? "N/A";
+        var tag = r.RfidTagId.ToString()[..8].ToUpper();
+        var sid = r.SessionId.ToString()[..8].ToUpper();
+        var lines = new List<string>
+        {
+            "WORLDPLAY ARCADE MANAGEMENT SYSTEM",
+            "========================================",
+            "DIGITAL RECEIPT",
+            "========================================",
+            "Receipt #:    " + r.ReceiptNumber,
+            "Status:       " + r.Status,
+            "Issued:       " + r.IssuedAt.ToLocalTime().ToString("MMM dd yyyy, HH:mm:ss"),
+            "----------------------------------------",
+            "Guest Name:   " + r.GuestName,
+            "Machine:      " + machine,
+            "RFID Tag:     " + tag,
+            "Session:      " + sid,
+            "----------------------------------------",
+            "Check-In:     " + r.CheckInTime.ToLocalTime().ToString("MMM dd yyyy, HH:mm"),
+            "Check-Out:    " + r.CheckOutTime.ToLocalTime().ToString("MMM dd yyyy, HH:mm"),
+            "Duration:     " + r.DurationMinutes + " minutes",
+            "----------------------------------------",
+            "Processed By: " + r.StaffName,
+            "",
+            "========================================",
+            "TOTAL:        LKR " + r.Fee.ToString("F2"),
+            "========================================",
+            "Thank you for visiting Worldplay!"
+        };
+        var content = string.Join("\n", lines);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        var base64 = Convert.ToBase64String(bytes);
+        Nav.NavigateTo($"data:text/plain;base64,{base64}", true);
+    }
+
+    private class ReceiptDto
+    {
+        public Guid Id { get; set; }
+        public Guid SessionId { get; set; }
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public Guid RfidTagId { get; set; }
+        public string GuestName { get; set; } = "Walk-in Guest";
+        public string? MachineName { get; set; }
+        public DateTime CheckInTime { get; set; }
+        public DateTime CheckOutTime { get; set; }
+        public int DurationMinutes { get; set; }
+        public decimal Fee { get; set; }
+        public string StaffName { get; set; } = string.Empty;
+        public DateTime IssuedAt { get; set; }
+        public string Status { get; set; } = "Issued";
+    }
+}
