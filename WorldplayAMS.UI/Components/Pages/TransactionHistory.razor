@@ -2,6 +2,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @inject IHttpClientFactory ClientFactory
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Worldplay AMS — Transaction History</PageTitle>
 
@@ -185,9 +186,14 @@
                                     <span class="badge-neon active"><span class="bi bi-check-circle-fill"></span> Completed</span>
                                 </td>
                                 <td>
-                                    <button class="btn-neon btn-neon-cyan" style="font-size:0.72rem; padding:0.3rem 0.6rem;" @onclick="() => ViewReceipt(t.Id)">
-                                        <span class="bi bi-file-text"></span> View
-                                    </button>
+                                    <div style="display: flex; gap: 0.3rem;">
+                                        <button class="btn-neon btn-neon-cyan" style="font-size:0.72rem; padding:0.3rem 0.6rem;" @onclick="() => ViewReceipt(t.Id)">
+                                            <span class="bi bi-file-text"></span> View
+                                        </button>
+                                        <button class="btn-neon btn-neon-green" style="font-size:0.72rem; padding:0.3rem 0.6rem;" @onclick="() => CopyPublicLink(t.Id)" title="Copy Public Link">
+                                            <span class="bi bi-link-45deg"></span>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -675,6 +681,12 @@
     private async Task QuickWeek() => await SetQuickFilter("week");
     private async Task QuickMonth() => await SetQuickFilter("month");
     private string QuickBtnClass(string mode) => activeQuick == mode ? "btn-quick-active" : "";
+
+    private async Task CopyPublicLink(Guid sessionId)
+    {
+        var url = $"{Nav.BaseUri}r/{sessionId}";
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", url);
+    }
 
     // Sort click handlers
     private void SortById() => SortBy("id");

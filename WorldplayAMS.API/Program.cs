@@ -25,12 +25,9 @@ builder.Services.AddSingleton(provider => new Supabase.Client(supabaseUrl, supab
 builder.Services.AddScoped<IFallbackCacheService, FallbackCacheService>();
 builder.Services.AddScoped<SessionManagerService>();
 builder.Services.AddScoped<MachineMonitoringService>();
-<<<<<<< Updated upstream
 builder.Services.AddScoped<IGameSessionService, GameSessionService>();
-=======
 builder.Services.AddScoped<TransactionHistoryService>();
 builder.Services.AddScoped<DigitalReceiptService>();
->>>>>>> Stashed changes
 builder.Services.AddScoped<IRfidReaderService, RfidReaderService>();
 
 var app = builder.Build();
