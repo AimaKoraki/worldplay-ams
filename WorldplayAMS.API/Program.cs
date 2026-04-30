@@ -23,12 +23,14 @@ builder.Services.AddSingleton(provider => new Supabase.Client(supabaseUrl, supab
 
 // Local Services
 builder.Services.AddScoped<IFallbackCacheService, FallbackCacheService>();
+builder.Services.AddScoped<ISupabaseRepository, SupabaseRepository>();
 builder.Services.AddScoped<SessionManagerService>();
 builder.Services.AddScoped<MachineMonitoringService>();
 builder.Services.AddScoped<IGameSessionService, GameSessionService>();
 builder.Services.AddScoped<TransactionHistoryService>();
 builder.Services.AddScoped<DigitalReceiptService>();
 builder.Services.AddScoped<IRfidReaderService, RfidReaderService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 var app = builder.Build();
 
@@ -161,13 +163,6 @@ app.MapPost("/api/seed", async (Supabase.Client client) =>
     return Results.Ok(logs);
 });
 
-<<<<<<< Updated upstream
-app.Run();
-
-// DTOs
-public record StartSessionDto(string TagUid, Guid MachineId);
-public record ProcessTapDto(string TagString);
-=======
 // DEV-13: Transaction History & Audit Endpoints
 
 app.MapGet("/api/transactions", async (DateTime? from, DateTime? to, TransactionHistoryService txnService) =>
@@ -244,9 +239,28 @@ app.MapGet("/api/receipts/{sessionId}", async (Guid sessionId, DigitalReceiptSer
 .WithName("GetReceiptBySession")
 .WithOpenApi();
 
+app.MapPost("/api/receipts/{sessionId}/email", async (Guid sessionId, EmailRequestDto request, DigitalReceiptService receiptService, IEmailService emailService) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Email)) return Results.BadRequest("Email address is required.");
+    
+    var receipt = await receiptService.GetReceiptBySessionAsync(sessionId);
+    if (receipt == null) return Results.NotFound("No receipt found for this session.");
+
+    var success = await emailService.SendReceiptEmailAsync(request.Email, receipt);
+    if (success)
+    {
+        return Results.Ok(new { message = "Email sent successfully." });
+    }
+    return Results.StatusCode(500); // Internal server error if it failed
+})
+.WithName("EmailReceipt")
+.WithOpenApi();
+
 app.Run();
 
 // DTOs
+public record StartSessionDto(string TagUid, Guid MachineId);
 public record ProcessTapDto(string TagString, string? StaffName = null, string? GuestName = null, Guid? MachineId = null);
 public record ToggleMachineDto(Guid MachineId, string TechnicianName = "Unknown Technician");
 public record AuditLogDto(string ManagerName, string Action, string? Details = null);
+public record EmailRequestDto(string Email);
