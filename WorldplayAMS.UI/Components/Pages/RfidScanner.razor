@@ -1,6 +1,7 @@
 @page "/scanner"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Staff")]
 @inject IHttpClientFactory ClientFactory
+@inject IWebHostEnvironment Env
 
 <PageTitle>Worldplay AMS — Check-In Scanner</PageTitle>
 
@@ -85,7 +86,7 @@
             }
 
             <!-- Guest info inputs -->
-            <div class="scanner-guest-inputs">
+            <div class="scanner-guest-inputs" @onclick:stopPropagation="true">
                 <div class="guest-input-group">
                     <label class="guest-input-label"><span class="bi bi-person-fill"></span> Guest Name</label>
                     <input type="text" class="form-input guest-name-input" placeholder="Walk-in Guest (optional)" @bind="guestName" />
@@ -102,7 +103,23 @@
                 </div>
             </div>
 
-            <!-- Hidden RFID input -->
+            @if (isDevelopment)
+            {
+                <div class="sim-tap-bar" @onclick:stopPropagation="true">
+                    <div class="sim-tap-label">
+                        <span class="bi bi-bug-fill me-1" style="color:var(--neon-amber);"></span>
+                        DEV MODE
+                    </div>
+                    <div class="sim-tags">
+                        @foreach (var tag in new[] { "DEMO-TAG-001", "DEMO-TAG-002", "DEMO-TAG-003" })
+                        {
+                            <button class="btn-sim-tag" @onclick="() => SimulateTap(tag)">
+                                <span class="bi bi-upc-scan me-1"></span>@tag
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
             <input type="text"
                    class="hidden-rfid-input"
                    @bind="scannedTag"
@@ -427,6 +444,49 @@
     .machine-select {
         cursor: pointer;
     }
+
+    /* Dev-mode simulate tap bar */
+    .sim-tap-bar {
+        width: calc(100% - 3rem);
+        margin: 0 1.5rem 1.5rem;
+        background: rgba(255,179,0,0.05);
+        border: 1px dashed rgba(255,179,0,0.3);
+        border-radius: 10px;
+        padding: 0.65rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .sim-tap-label {
+        font-family: var(--font-heading);
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--neon-amber);
+        white-space: nowrap;
+    }
+    .sim-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .btn-sim-tag {
+        background: rgba(255,179,0,0.08);
+        border: 1px solid rgba(255,179,0,0.3);
+        color: var(--neon-amber);
+        border-radius: 6px;
+        padding: 0.3rem 0.75rem;
+        font-size: 0.78rem;
+        font-family: var(--font-heading);
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+    }
+    .btn-sim-tag:hover {
+        background: rgba(255,179,0,0.18);
+        border-color: rgba(255,179,0,0.6);
+        transform: translateY(-1px);
+    }
 </style>
 
 @code {
@@ -443,8 +503,11 @@
     private List<MachineDto> machines = new();
     private ElementReference rfidInputRef;
 
+    private bool isDevelopment = false;
+
     protected override async Task OnInitializedAsync()
     {
+        isDevelopment = Env.IsDevelopment();
         await LoadMachines();
     }
 
@@ -469,6 +532,12 @@
         try { await rfidInputRef.FocusAsync(); } catch { }
     }
 
+    private async Task SimulateTap(string tagString)
+    {
+        await ProcessTap(tagString);
+        await FocusInput();
+    }
+
     private async Task HandleKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(scannedTag))
@@ -486,13 +555,16 @@
             displayMessage = "Session completed — see billing below";
             try
             {
-                // Parse "Success: Checked out. Duration: X min | Fee: $Y.YY"
+                // API returns: "Success: Checked out. Duration: X min | Fee: LKR Y.YY"
                 var durationStart = message.IndexOf("Duration:") + 9;
-                var durationEnd = message.IndexOf("min");
+                var durationEnd = message.IndexOf(" min");
                 checkoutDuration = message.Substring(durationStart, durationEnd - durationStart).Trim();
 
-                var feeStart = message.IndexOf("$") + 1;
-                checkoutFee = message.Substring(feeStart).Trim();
+                // Look for "LKR " marker — skip past it to get the number
+                var lkrIndex = message.IndexOf("LKR");
+                checkoutFee = lkrIndex >= 0
+                    ? message.Substring(lkrIndex + 3).Trim()
+                    : message.Substring(message.IndexOf("Fee:") + 4).Trim();
             }
             catch
             {

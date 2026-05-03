@@ -53,15 +53,35 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
                     };
 
                     await _repository.InsertSessionAsync(newSession);
+
+                    // DEV-17: Audit log — Check-in
+                    await _repository.InsertAuditLogAsync(new ManagerAuditLog
+                    {
+                        Id = Guid.NewGuid(),
+                        ManagerName = staffName ?? "Unknown",
+                        Action = "SESSION_CHECK_IN",
+                        Details = $"Tag: {tagString} | Guest: {guestName ?? "Walk-in Guest"} | Machine: {machineId?.ToString() ?? "None"}",
+                        Timestamp = DateTime.UtcNow
+                    });
+
                     return "Success: Checked in!";
                 }
                 else
                 {
                     // Check-out: complete session, calculate fee, generate receipt
                     var session = activeSessionResponse;
-                    session.EndTime = DateTime.UtcNow;
+                    var endTime = DateTime.UtcNow;
+                    session.EndTime = endTime;
                     session.Status = "Completed";
-                    session.TotalDurationMinutes = (int)Math.Ceiling((session.EndTime.Value - session.StartTime).TotalMinutes);
+
+                    // Force StartTime to UTC — Postgrest deserializes TIMESTAMPTZ as Unspecified kind
+                    var startUtc = session.StartTime.Kind == DateTimeKind.Utc
+                        ? session.StartTime
+                        : DateTime.SpecifyKind(session.StartTime, DateTimeKind.Utc);
+
+                    var durationMinutes = (endTime - startUtc).TotalMinutes;
+                    // Minimum 1 minute floor — prevents negative values from clock skew or rapid demo taps
+                    session.TotalDurationMinutes = (int)Math.Max(1, Math.Ceiling(durationMinutes));
                     session.Fee = session.TotalDurationMinutes * _ratePerMinute;
                     session.CheckedOutByStaff = staffName ?? "Unknown";
 
@@ -75,6 +95,16 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
                         machineName = machine?.Name;
                     }
                     await _receiptService.GenerateReceiptAsync(session, machineName);
+
+                    // DEV-17: Audit log — Check-out with billing
+                    await _repository.InsertAuditLogAsync(new ManagerAuditLog
+                    {
+                        Id = Guid.NewGuid(),
+                        ManagerName = staffName ?? "Unknown",
+                        Action = "SESSION_CHECK_OUT",
+                        Details = $"Tag: {tagString} | Guest: {session.GuestName} | Duration: {session.TotalDurationMinutes} min | Fee: LKR {session.Fee:F2} | Staff: {session.CheckedOutByStaff}",
+                        Timestamp = DateTime.UtcNow
+                    });
 
                     _logger.LogInformation("Check-out completed by staff '{Staff}' for tag '{Tag}' at {Time:u}. Duration: {Duration} min, Fee: LKR {Fee:F2}",
                         session.CheckedOutByStaff, tagString, session.EndTime.Value, session.TotalDurationMinutes, session.Fee);

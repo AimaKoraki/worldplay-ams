@@ -18,4 +18,19 @@ public class ArcadeMachine : BaseModel
 
     [Column("status")]
     public string Status { get; set; } = "Online";
+
+    [Column("category")]
+    public string? Category { get; set; }
+
+    [Column("installationdate")]
+    public DateTime? InstallationDate { get; set; }
+
+    [Column("lastservicedate")]
+    public DateTime? LastServiceDate { get; set; }
+
+    [Column("currentcostperplay")]
+    public decimal? CurrentCostPerPlay { get; set; }
+
+    [Column("zoneid")]
+    public Guid? ZoneId { get; set; }
 }
