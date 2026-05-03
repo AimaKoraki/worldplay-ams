@@ -1,6 +1,7 @@
 using Supabase;
 using WorldplayAMS.API.Services;
 using WorldplayAMS.Core.Interfaces;
+using WorldplayAMS.Core.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,7 +65,7 @@ app.MapPost("/api/sessions/start", async (StartSessionDto request, IGameSessionS
 app.MapGet("/api/sessions/active", async (SessionManagerService sessionService) =>
 {
     var sessions = await sessionService.GetActiveSessionsAsync();
-    var dtos = sessions.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes, s.Fee });
+    var dtos = sessions.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes, s.Fee, s.GuestName, s.CheckedOutByStaff, s.MachineId });
     return Results.Ok(dtos);
 })
 .WithName("GetActiveSessions")
@@ -107,7 +108,7 @@ app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
 app.MapGet("/api/sessions/history", async (SessionManagerService sessionService) =>
 {
     var result = await sessionService.GetCompletedSessionsAsync();
-    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes, s.Fee });
+    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.EndTime, s.Status, s.TotalDurationMinutes, s.Fee, s.GuestName, s.CheckedOutByStaff, s.MachineId });
     return Results.Ok(dtos);
 })
 .WithName("GetSessionHistory")
@@ -130,6 +131,65 @@ app.MapGet("/api/machines/logs", async (MachineMonitoringService machineService)
 .WithName("GetMachineUsageLogs")
 .WithOpenApi();
 
+// DEV-16: Auth Proxy Endpoints
+
+app.MapPost("/api/auth/login", async (LoginDto request, Supabase.Client client) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            return Results.BadRequest(new { error = "Email and password are required." });
+
+        // Authenticate via Supabase Auth (GoTrue)
+        var authResponse = await client.Auth.SignIn(request.Email, request.Password);
+        if (authResponse?.User == null)
+            return Results.Unauthorized();
+
+        // Look up user role from Users table
+        var userRecord = await client.From<UserContext>()
+            .Where(u => u.Email == request.Email)
+            .Single();
+
+        var userName = userRecord?.Name ?? authResponse.User.Email ?? "Unknown";
+        var userRole = userRecord?.SystemRole ?? "Staff";
+
+        return Results.Ok(new
+        {
+            name = userName,
+            email = request.Email,
+            role = userRole,
+            authenticated = true
+        });
+    }
+    catch (Supabase.Gotrue.Exceptions.GotrueException)
+    {
+        // DEV-17: Audit log — Failed login attempt
+        try
+        {
+            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
+            await txnService.LogManagerActionAsync("SYSTEM", "LOGIN_FAILED", $"Failed login attempt for: {request.Email}");
+        }
+        catch { /* best effort */ }
+        return Results.Json(new { error = "Invalid email or password." }, statusCode: 401);
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = "Authentication service unavailable: " + ex.Message }, statusCode: 500);
+    }
+})
+.WithName("Login")
+.WithOpenApi();
+
+app.MapPost("/api/auth/logout", () =>
+{
+    return Results.Ok(new { message = "Logged out successfully." });
+})
+.WithName("Logout")
+.WithOpenApi();
+
+// Seed endpoint — Development only
+if (app.Environment.IsDevelopment())
+{
 app.MapPost("/api/seed", async (Supabase.Client client) =>
 {
     var logs = new List<string>();
@@ -162,6 +222,7 @@ app.MapPost("/api/seed", async (Supabase.Client client) =>
 
     return Results.Ok(logs);
 });
+}
 
 // DEV-13: Transaction History & Audit Endpoints
 
@@ -256,6 +317,143 @@ app.MapPost("/api/receipts/{sessionId}/email", async (Guid sessionId, EmailReque
 .WithName("EmailReceipt")
 .WithOpenApi();
 
+// DEV-52: Staff Management Endpoints (Admin only)
+
+app.MapGet("/api/staff", async (Supabase.Client client) =>
+{
+    try
+    {
+        var users = await client.From<UserContext>().Get();
+        var dtos = users.Models.Select(u => new
+        {
+            u.Id, u.Name, u.Email, u.SystemRole,
+            u.FirstName, u.LastName, u.CreatedAt
+        });
+        return Results.Ok(dtos);
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 500);
+    }
+})
+.WithName("GetAllStaff")
+.WithOpenApi();
+
+app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
+        return Results.BadRequest(new { error = "Email, password, and name are required." });
+
+    var validRoles = new[] { "Admin", "Staff", "Technician" };
+    if (!validRoles.Contains(request.Role))
+        return Results.BadRequest(new { error = "Role must be Admin, Staff, or Technician." });
+
+    try
+    {
+        // Step 1: Create the user in Supabase Auth (Admin API)
+        var authUser = await client.Auth.Admin.CreateUser(new Supabase.Gotrue.AdminUserAttributes
+        {
+            Email = request.Email,
+            Password = request.Password,
+            EmailConfirm = true
+        });
+
+        if (authUser?.Id == null)
+            return Results.Json(new { error = "Failed to create auth user." }, statusCode: 500);
+
+        // Step 2: Insert into Users table
+        var newUser = new UserContext
+        {
+            Id = Guid.Parse(authUser.Id),
+            Name = request.Name,
+            Email = request.Email,
+            SystemRole = request.Role
+        };
+        await client.From<UserContext>().Insert(newUser);
+
+        // DEV-17: Audit log — Staff created
+        try
+        {
+            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
+            await txnService.LogManagerActionAsync("Admin", "STAFF_CREATED", $"Created {request.Role} account: {request.Name} ({request.Email})");
+        }
+        catch { /* best effort */ }
+
+        return Results.Ok(new { id = authUser.Id, name = request.Name, email = request.Email, role = request.Role });
+    }
+    catch (Supabase.Gotrue.Exceptions.GotrueException ex)
+    {
+        return Results.Json(new { error = "Auth error: " + ex.Message }, statusCode: 400);
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 500);
+    }
+})
+.WithName("CreateStaff")
+.WithOpenApi();
+
+app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, Supabase.Client client) =>
+{
+    var validRoles = new[] { "Admin", "Staff", "Technician" };
+    if (!validRoles.Contains(request.Role))
+        return Results.BadRequest(new { error = "Role must be Admin, Staff, or Technician." });
+
+    try
+    {
+        await client.From<UserContext>()
+            .Where(u => u.Id == id)
+            .Set(u => u.SystemRole, request.Role)
+            .Update();
+
+        // DEV-17: Audit log — Role changed
+        try
+        {
+            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
+            await txnService.LogManagerActionAsync("Admin", "ROLE_CHANGED", $"User {id} role changed to {request.Role}");
+        }
+        catch { /* best effort */ }
+
+        return Results.Ok(new { message = "Role updated successfully." });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 500);
+    }
+})
+.WithName("UpdateStaffRole")
+.WithOpenApi();
+
+app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client) =>
+{
+    try
+    {
+        // Step 1: Delete from Users table
+        await client.From<UserContext>()
+            .Where(u => u.Id == id)
+            .Delete();
+
+        // Step 2: Delete from Supabase Auth
+        await client.Auth.Admin.DeleteUser(id.ToString());
+
+        // DEV-17: Audit log — Staff deleted
+        try
+        {
+            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
+            await txnService.LogManagerActionAsync("Admin", "STAFF_DELETED", $"Deleted staff account: {id}");
+        }
+        catch { /* best effort */ }
+
+        return Results.Ok(new { message = "Staff account deleted." });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 500);
+    }
+})
+.WithName("DeleteStaff")
+.WithOpenApi();
+
 app.Run();
 
 // DTOs
@@ -264,3 +462,6 @@ public record ProcessTapDto(string TagString, string? StaffName = null, string? 
 public record ToggleMachineDto(Guid MachineId, string TechnicianName = "Unknown Technician");
 public record AuditLogDto(string ManagerName, string Action, string? Details = null);
 public record EmailRequestDto(string Email);
+public record LoginDto(string Email, string Password);
+public record CreateStaffDto(string Email, string Password, string Name, string Role);
+public record UpdateRoleDto(string Role);

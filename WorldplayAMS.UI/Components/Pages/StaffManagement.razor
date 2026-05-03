@@ -1,0 +1,578 @@
+@page "/admin/staff"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject IHttpClientFactory ClientFactory
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Worldplay AMS — Staff Management</PageTitle>
+
+<div class="page-container">
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="page-header-content">
+            <div class="page-title-group">
+                <div class="page-title-icon">
+                    <span class="bi bi-people-fill"></span>
+                </div>
+                <div>
+                    <h1 class="page-title">Staff Management</h1>
+                    <p class="page-subtitle">Create and manage staff accounts — DEV-52</p>
+                </div>
+            </div>
+            <button class="btn-neon" @onclick="OpenCreatePanel" id="btn-add-staff">
+                <span class="bi bi-person-plus-fill me-2"></span>Add Staff Account
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="staff-stats-row">
+        <div class="glass-card staff-stat-card">
+            <span class="staff-stat-icon" style="color:var(--neon-magenta);"><span class="bi bi-shield-lock-fill"></span></span>
+            <div>
+                <span class="staff-stat-val">@staffList.Count(s => s.SystemRole == "Admin")</span>
+                <span class="staff-stat-lbl">Admins</span>
+            </div>
+        </div>
+        <div class="glass-card staff-stat-card">
+            <span class="staff-stat-icon" style="color:var(--status-active);"><span class="bi bi-person-badge-fill"></span></span>
+            <div>
+                <span class="staff-stat-val">@staffList.Count(s => s.SystemRole == "Staff")</span>
+                <span class="staff-stat-lbl">Staff</span>
+            </div>
+        </div>
+        <div class="glass-card staff-stat-card">
+            <span class="staff-stat-icon" style="color:var(--neon-cyan);"><span class="bi bi-wrench-adjustable-circle-fill"></span></span>
+            <div>
+                <span class="staff-stat-val">@staffList.Count(s => s.SystemRole == "Technician")</span>
+                <span class="staff-stat-lbl">Technicians</span>
+            </div>
+        </div>
+        <div class="glass-card staff-stat-card">
+            <span class="staff-stat-icon" style="color:var(--neon-amber);"><span class="bi bi-people-fill"></span></span>
+            <div>
+                <span class="staff-stat-val">@staffList.Count</span>
+                <span class="staff-stat-lbl">Total</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main card -->
+    <div class="glass-card">
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border text-info" role="status"></div>
+                <p>Loading staff accounts...</p>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(loadError))
+        {
+            <div class="error-state">
+                <span class="bi bi-exclamation-triangle-fill"></span>
+                <p>@loadError</p>
+                <button class="btn-neon" @onclick="LoadStaff">Retry</button>
+            </div>
+        }
+        else if (staffList.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="bi bi-people" style="font-size:3rem; color:var(--text-disabled);"></span>
+                <p style="color:var(--text-secondary); margin-top:1rem;">No staff accounts found. Create the first one!</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="data-table" id="staff-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Change Role</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var staff in staffList)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="staff-name-cell">
+                                        <div class="staff-avatar" style="background:@GetRoleColor(staff.SystemRole)22; border-color:@GetRoleColor(staff.SystemRole)44;">
+                                            <span style="color:@GetRoleColor(staff.SystemRole);">@(staff.Name?.FirstOrDefault() ?? '?')</span>
+                                        </div>
+                                        <span>@staff.Name</span>
+                                    </div>
+                                </td>
+                                <td style="color:var(--text-secondary); font-size:0.85rem;">@staff.Email</td>
+                                <td>
+                                    <span class="role-badge role-@staff.SystemRole.ToLower()">
+                                        <span class="bi @GetRoleIcon(staff.SystemRole)"></span>
+                                        @staff.SystemRole
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="role-change-group">
+                                        <select class="form-input role-select" value="@staff.SystemRole"
+                                                @onchange="e => staff.PendingRole = e.Value?.ToString() ?? staff.SystemRole">
+                                            <option value="Admin">Admin</option>
+                                            <option value="Staff">Staff</option>
+                                            <option value="Technician">Technician</option>
+                                        </select>
+                                        @if (!string.IsNullOrEmpty(staff.PendingRole) && staff.PendingRole != staff.SystemRole)
+                                        {
+                                            <button class="btn-apply-role" @onclick="() => ApplyRoleChange(staff)"
+                                                    title="Apply role change">
+                                                <span class="bi bi-check-circle-fill"></span>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    <button class="btn-delete-staff" @onclick="() => ConfirmDelete(staff)"
+                                            title="Delete account" id="btn-delete-@staff.Id">
+                                        <span class="bi bi-trash3-fill"></span>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(actionMessage))
+        {
+            <div class="action-toast @(actionIsError ? "toast-error" : "toast-success")">
+                <span class="bi @(actionIsError ? "bi-x-circle-fill" : "bi-check-circle-fill") me-2"></span>
+                @actionMessage
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Create Staff Side Panel -->
+@if (showCreatePanel)
+{
+    <div class="panel-overlay" @onclick="CloseCreatePanel">
+        <div class="side-panel glass-card" @onclick:stopPropagation="true">
+            <div class="side-panel-header">
+                <h2 class="side-panel-title">
+                    <span class="bi bi-person-plus-fill me-2" style="color:var(--neon-cyan);"></span>
+                    New Staff Account
+                </h2>
+                <button class="btn-close-panel" @onclick="CloseCreatePanel">
+                    <span class="bi bi-x-lg"></span>
+                </button>
+            </div>
+
+            <div class="side-panel-body">
+                <div class="form-group mb-3">
+                    <label class="form-label-custom">Full Name</label>
+                    <input id="input-staff-name" type="text" class="form-input" placeholder="e.g. Kasun Perera"
+                           @bind="newName" disabled="@isCreating" />
+                </div>
+                <div class="form-group mb-3">
+                    <label class="form-label-custom">Email Address</label>
+                    <input id="input-staff-email" type="email" class="form-input" placeholder="staff@worldplay.com"
+                           @bind="newEmail" disabled="@isCreating" />
+                </div>
+                <div class="form-group mb-3">
+                    <label class="form-label-custom">Temporary Password</label>
+                    <input id="input-staff-password" type="password" class="form-input" placeholder="Min. 8 characters"
+                           @bind="newPassword" disabled="@isCreating" />
+                    <small style="color:var(--text-disabled); font-size:0.72rem; margin-top:0.3rem; display:block;">
+                        Staff will use this to log in. They can change it later.
+                    </small>
+                </div>
+                <div class="form-group mb-4">
+                    <label class="form-label-custom">Role</label>
+                    <select id="select-staff-role" class="form-input" @bind="newRole" disabled="@isCreating">
+                        <option value="Staff">Staff — Check-in &amp; Operations</option>
+                        <option value="Technician">Technician — Diagnostics &amp; Hardware</option>
+                        <option value="Admin">Admin — Full System Access</option>
+                    </select>
+                </div>
+
+                @if (!string.IsNullOrEmpty(createError))
+                {
+                    <div class="login-error mb-3">
+                        <span class="bi bi-exclamation-triangle-fill me-2"></span>@createError
+                    </div>
+                }
+
+                <button id="btn-create-staff-submit" class="btn-login-submit" @onclick="CreateStaff" disabled="@isCreating">
+                    @if (isCreating)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>Creating Account...</span>
+                    }
+                    else
+                    {
+                        <span class="bi bi-person-check-fill me-2"></span>
+                        <span>Create Account</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (staffToDelete != null)
+{
+    <div class="panel-overlay" @onclick="CancelDelete">
+        <div class="confirm-modal glass-card" @onclick:stopPropagation="true">
+            <div class="confirm-icon">
+                <span class="bi bi-exclamation-triangle-fill" style="color:var(--status-error); font-size:2rem;"></span>
+            </div>
+            <h3 class="confirm-title">Delete Account?</h3>
+            <p class="confirm-desc">
+                This will permanently delete <strong>@staffToDelete.Name</strong>'s account from both the
+                system and Supabase Auth. This action <strong>cannot be undone</strong>.
+            </p>
+            <div class="confirm-actions">
+                <button class="btn-cancel" @onclick="CancelDelete">Cancel</button>
+                <button class="btn-confirm-delete" @onclick="DeleteStaff" disabled="@isDeleting">
+                    @if (isDeleting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Delete Account
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .page-header { margin-bottom: 1.5rem; }
+    .page-header-content { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+    .page-title-group { display: flex; align-items: center; gap: 1rem; }
+    .page-title-icon {
+        width: 52px; height: 52px;
+        background: linear-gradient(135deg, rgba(0,240,255,0.15), rgba(157,0,255,0.15));
+        border: 1px solid rgba(0,240,255,0.3);
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; color: var(--neon-cyan);
+    }
+    .page-title { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); margin: 0; }
+    .page-subtitle { font-size: 0.8rem; color: var(--text-secondary); margin: 0; }
+
+    /* Stats row */
+    .staff-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .staff-stat-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; }
+    .staff-stat-icon { font-size: 1.5rem; }
+    .staff-stat-val { display: block; font-family: var(--font-heading); font-size: 1.6rem; font-weight: 700; color: var(--text-primary); }
+    .staff-stat-lbl { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); }
+
+    /* Table */
+    .staff-name-cell { display: flex; align-items: center; gap: 0.75rem; }
+    .staff-avatar {
+        width: 34px; height: 34px;
+        border-radius: 8px; border: 1px solid;
+        display: flex; align-items: center; justify-content: center;
+        font-family: var(--font-heading); font-weight: 700; font-size: 0.9rem;
+        flex-shrink: 0;
+    }
+
+    /* Role badge */
+    .role-badge {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        padding: 0.3rem 0.75rem; border-radius: 20px;
+        font-family: var(--font-heading); font-size: 0.72rem; font-weight: 700;
+        letter-spacing: 0.8px; text-transform: uppercase;
+    }
+    .role-admin { background: rgba(255,0,170,0.12); color: var(--neon-magenta); border: 1px solid rgba(255,0,170,0.3); }
+    .role-staff { background: rgba(0,230,118,0.12); color: var(--status-active); border: 1px solid rgba(0,230,118,0.3); }
+    .role-technician { background: rgba(0,240,255,0.1); color: var(--neon-cyan); border: 1px solid rgba(0,240,255,0.3); }
+
+    /* Role change */
+    .role-change-group { display: flex; align-items: center; gap: 0.5rem; }
+    .role-select { padding: 0.35rem 0.65rem; font-size: 0.82rem; height: auto; width: auto; min-width: 130px; }
+    .btn-apply-role {
+        background: rgba(0,230,118,0.15); border: 1px solid rgba(0,230,118,0.4);
+        color: var(--status-active); border-radius: 6px;
+        padding: 0.35rem 0.6rem; cursor: pointer; font-size: 1rem;
+        transition: all 0.2s;
+    }
+    .btn-apply-role:hover { background: rgba(0,230,118,0.3); }
+
+    /* Action buttons */
+    .btn-delete-staff {
+        background: rgba(255,51,102,0.1); border: 1px solid rgba(255,51,102,0.3);
+        color: var(--status-error); border-radius: 7px;
+        padding: 0.4rem 0.65rem; cursor: pointer; font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+    .btn-delete-staff:hover { background: rgba(255,51,102,0.25); }
+
+    /* Toast */
+    .action-toast {
+        margin-top: 1rem; padding: 0.75rem 1rem;
+        border-radius: 8px; font-size: 0.85rem;
+        display: flex; align-items: center;
+        animation: slideUp 0.25s ease;
+    }
+    .toast-success { background: rgba(0,230,118,0.1); border: 1px solid rgba(0,230,118,0.3); color: var(--status-active); }
+    .toast-error { background: rgba(255,51,102,0.08); border: 1px solid rgba(255,51,102,0.3); color: var(--status-error); }
+
+    /* Side Panel */
+    .panel-overlay {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+        z-index: 1000; display: flex; align-items: center; justify-content: flex-end;
+        animation: fadeIn 0.2s ease;
+    }
+    .side-panel {
+        width: 100%; max-width: 420px; height: 100%;
+        border-radius: 0; border-right: none;
+        display: flex; flex-direction: column;
+        animation: slideLeft 0.25s ease;
+        overflow-y: auto;
+    }
+    @@keyframes slideLeft { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .side-panel-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 1.5rem 1.75rem 1rem;
+        border-bottom: 1px solid var(--surface-border);
+    }
+    .side-panel-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+    .btn-close-panel {
+        background: var(--surface-raised); border: 1px solid var(--surface-border);
+        color: var(--text-secondary); border-radius: 8px;
+        width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: all 0.2s;
+    }
+    .btn-close-panel:hover { color: var(--text-primary); background: var(--surface-hover); }
+    .side-panel-body { padding: 1.5rem 1.75rem; flex: 1; }
+
+    /* Confirm modal */
+    .confirm-modal {
+        max-width: 440px; width: 90%; margin: auto;
+        padding: 2rem; border-radius: 16px; text-align: center;
+        animation: slideUp 0.25s ease;
+    }
+    .confirm-icon { margin-bottom: 1rem; }
+    .confirm-title { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; }
+    .confirm-desc { color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1.5rem; line-height: 1.6; }
+    .confirm-actions { display: flex; gap: 1rem; justify-content: center; }
+    .btn-cancel {
+        padding: 0.65rem 1.5rem; border-radius: 8px;
+        background: var(--surface-raised); border: 1px solid var(--surface-border);
+        color: var(--text-primary); cursor: pointer; transition: all 0.2s;
+        font-family: var(--font-heading); font-weight: 600;
+    }
+    .btn-cancel:hover { background: var(--surface-hover); }
+    .btn-confirm-delete {
+        padding: 0.65rem 1.5rem; border-radius: 8px;
+        background: rgba(255,51,102,0.15); border: 1px solid rgba(255,51,102,0.4);
+        color: var(--status-error); cursor: pointer; transition: all 0.2s;
+        font-family: var(--font-heading); font-weight: 600;
+        display: flex; align-items: center;
+    }
+    .btn-confirm-delete:hover { background: rgba(255,51,102,0.3); }
+
+    /* Loading/empty states */
+    .loading-state, .empty-state, .error-state {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; padding: 3rem; color: var(--text-secondary);
+        gap: 1rem;
+    }
+</style>
+
+@code {
+    private List<StaffViewModel> staffList = new();
+    private bool isLoading = true;
+    private string loadError = string.Empty;
+    private string actionMessage = string.Empty;
+    private bool actionIsError = false;
+
+    // Create panel
+    private bool showCreatePanel = false;
+    private string newName = string.Empty;
+    private string newEmail = string.Empty;
+    private string newPassword = string.Empty;
+    private string newRole = "Staff";
+    private string createError = string.Empty;
+    private bool isCreating = false;
+
+    // Delete
+    private StaffViewModel? staffToDelete = null;
+    private bool isDeleting = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStaff();
+    }
+
+    private async Task LoadStaff()
+    {
+        isLoading = true;
+        loadError = string.Empty;
+        try
+        {
+            var client = ClientFactory.CreateClient("ApiClient");
+            var response = await client.GetFromJsonAsync<List<StaffViewModel>>("/api/staff");
+            staffList = response ?? new();
+        }
+        catch (Exception ex)
+        {
+            loadError = "Could not load staff accounts: " + ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OpenCreatePanel()
+    {
+        newName = newEmail = newPassword = createError = string.Empty;
+        newRole = "Staff";
+        showCreatePanel = true;
+    }
+
+    private void CloseCreatePanel() => showCreatePanel = false;
+
+    private async Task CreateStaff()
+    {
+        createError = string.Empty;
+        if (string.IsNullOrWhiteSpace(newName)) { createError = "Name is required."; return; }
+        if (string.IsNullOrWhiteSpace(newEmail)) { createError = "Email is required."; return; }
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8) { createError = "Password must be at least 8 characters."; return; }
+
+        isCreating = true;
+        try
+        {
+            var client = ClientFactory.CreateClient("ApiClient");
+            var response = await client.PostAsJsonAsync("/api/staff", new
+            {
+                Email = newEmail,
+                Password = newPassword,
+                Name = newName,
+                Role = newRole
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                showCreatePanel = false;
+                await LoadStaff();
+                ShowToast($"Account for {newName} created successfully.", false);
+            }
+            else
+            {
+                var err = await response.Content.ReadFromJsonAsync<ErrorDto>();
+                createError = err?.Error ?? "Failed to create account.";
+            }
+        }
+        catch (Exception ex)
+        {
+            createError = "Connection error: " + ex.Message;
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private async Task ApplyRoleChange(StaffViewModel staff)
+    {
+        try
+        {
+            var client = ClientFactory.CreateClient("ApiClient");
+            var response = await client.PutAsJsonAsync($"/api/staff/{staff.Id}/role", new { Role = staff.PendingRole });
+            if (response.IsSuccessStatusCode)
+            {
+                staff.SystemRole = staff.PendingRole!;
+                staff.PendingRole = null;
+                ShowToast($"{staff.Name}'s role updated to {staff.SystemRole}.", false);
+            }
+            else
+            {
+                ShowToast("Failed to update role.", true);
+            }
+        }
+        catch
+        {
+            ShowToast("Connection error.", true);
+        }
+    }
+
+    private void ConfirmDelete(StaffViewModel staff) => staffToDelete = staff;
+    private void CancelDelete() => staffToDelete = null;
+
+    private async Task DeleteStaff()
+    {
+        if (staffToDelete == null) return;
+        isDeleting = true;
+        try
+        {
+            var client = ClientFactory.CreateClient("ApiClient");
+            var response = await client.DeleteAsync($"/api/staff/{staffToDelete.Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                var name = staffToDelete.Name;
+                staffList.Remove(staffToDelete);
+                staffToDelete = null;
+                ShowToast($"{name}'s account has been deleted.", false);
+            }
+            else
+            {
+                ShowToast("Failed to delete account.", true);
+            }
+        }
+        catch
+        {
+            ShowToast("Connection error.", true);
+        }
+        finally
+        {
+            isDeleting = false;
+            staffToDelete = null;
+        }
+    }
+
+    private void ShowToast(string message, bool isError)
+    {
+        actionMessage = message;
+        actionIsError = isError;
+        _ = Task.Delay(4000).ContinueWith(_ => { actionMessage = string.Empty; InvokeAsync(StateHasChanged); });
+    }
+
+    private static string GetRoleColor(string role) => role switch
+    {
+        "Admin" => "#ff00aa",
+        "Technician" => "#00f0ff",
+        _ => "#00e676"
+    };
+
+    private static string GetRoleIcon(string role) => role switch
+    {
+        "Admin" => "bi-shield-lock-fill",
+        "Technician" => "bi-wrench-adjustable-circle-fill",
+        _ => "bi-person-badge-fill"
+    };
+
+    private class StaffViewModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string SystemRole { get; set; } = "Staff";
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public string? PendingRole { get; set; }
+    }
+
+    private class ErrorDto
+    {
+        public string? Error { get; set; }
+    }
+}
