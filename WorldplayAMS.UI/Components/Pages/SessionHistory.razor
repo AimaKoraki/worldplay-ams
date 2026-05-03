@@ -2,17 +2,17 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Staff")]
 @inject IHttpClientFactory ClientFactory
 
-<PageTitle>Worldplay AMS — Session History</PageTitle>
+<PageTitle>Worldplay AMS — Session Logs</PageTitle>
 
 <div class="history-wrap">
 
     <!-- Page Header -->
-    <div class="page-header mb-5">
+    <div class="page-header mb-4">
         <div>
             <h1 class="page-title">
-                <span class="bi bi-clock-history me-3" style="color:var(--neon-purple);"></span>Session History
+                <span class="bi bi-clock-history me-3" style="color:var(--neon-purple);"></span>Session Logs
             </h1>
-            <p class="page-subtitle">View completed guest sessions and billing records</p>
+            <p class="page-subtitle">DEV-20 — Resolve billing disputes with complete session audit trail</p>
         </div>
         <div class="header-actions">
             <button class="btn-neon btn-neon-cyan" @onclick="LoadHistory">
@@ -21,21 +21,44 @@
         </div>
     </div>
 
+    <!-- Search & Filter Bar -->
+    <div class="glass-card filter-bar">
+        <div class="filter-group">
+            <span class="bi bi-search filter-icon"></span>
+            <input type="text" class="form-input filter-input" placeholder="Search by Guest Name, Tag ID, or Staff..."
+                   @bind="searchQuery" @bind:event="oninput" />
+        </div>
+        <div class="filter-group">
+            <span class="bi bi-funnel filter-icon"></span>
+            <select class="form-input filter-select" @bind="statusFilter">
+                <option value="All">All Sessions</option>
+                <option value="Active">Active Only</option>
+                <option value="Completed">Completed Only</option>
+            </select>
+        </div>
+        @if (!string.IsNullOrEmpty(searchQuery) || statusFilter != "All")
+        {
+            <button class="btn-clear-filter" @onclick="ClearFilters">
+                <span class="bi bi-x-circle me-1"></span>Clear
+            </button>
+        }
+    </div>
+
     <!-- Revenue Summary Strip -->
-    <div class="revenue-strip mb-5">
+    <div class="revenue-strip mb-4">
         <div class="strip-item">
             <span class="bi bi-receipt-cutoff" style="color:var(--neon-amber);"></span>
-            <span>@sessions.Count Total Sessions</span>
+            <span>@filteredSessions.Count Sessions</span>
         </div>
         <div class="strip-divider"></div>
         <div class="strip-item">
             <span class="bi bi-clock" style="color:var(--neon-cyan);"></span>
-            <span>@totalMinutes min Total Playtime</span>
+            <span>@filteredSessions.Sum(s => s.TotalDurationMinutes ?? 0) min Playtime</span>
         </div>
         <div class="strip-divider"></div>
         <div class="strip-item">
             <span class="bi bi-cash-coin" style="color:var(--status-active);"></span>
-            <span>LKR @totalRevenue.ToString("F2") Total Revenue</span>
+            <span>LKR @filteredSessions.Sum(s => s.Fee ?? 0).ToString("F2") Revenue</span>
         </div>
     </div>
 
@@ -46,57 +69,94 @@
             <p class="mt-3">Loading session records...</p>
         </div>
     }
-    else if (!sessions.Any())
+    else if (!filteredSessions.Any())
     {
         <div class="glass-card empty-state-full">
             <span class="bi bi-inbox" style="font-size:3rem; color:var(--text-disabled);"></span>
-            <h3 class="mt-3 text-white">No Completed Sessions</h3>
-            <p class="mt-1 text-muted-custom">Sessions will appear here once guests check out.</p>
+            <h3 class="mt-3 text-white">No Sessions Found</h3>
+            <p class="mt-1 text-muted-custom">
+                @if (!string.IsNullOrEmpty(searchQuery) || statusFilter != "All")
+                {
+                    <span>No sessions match your filters. Try clearing them.</span>
+                }
+                else
+                {
+                    <span>Sessions will appear here once guests check in.</span>
+                }
+            </p>
         </div>
     }
     else
     {
         <div class="glass-card" style="border-top: 3px solid var(--neon-purple); padding:0; overflow:hidden;">
             <div style="padding: 1.5rem 1.75rem 0.75rem;">
-                <p class="section-title"><span class="bi bi-list-check text-purple"></span> Completed Sessions</p>
+                <p class="section-title"><span class="bi bi-list-check text-purple"></span> Session Records</p>
             </div>
             <div class="table-responsive">
-                <table class="table-glass">
+                <table class="table-glass" id="session-logs-table">
                     <thead>
                         <tr>
                             <th>Session ID</th>
-                            <th>Tag ID</th>
+                            <th>Guest Name</th>
+                            <th>RFID Tag</th>
+                            <th>Machine</th>
                             <th>Check-In</th>
                             <th>Check-Out</th>
                             <th>Duration</th>
-                            <th>Fee</th>
+                            <th>Fee (LKR)</th>
+                            <th>Staff</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var s in sessions)
+                        @foreach (var s in filteredSessions)
                         {
-                            <tr>
-                                <td class="font-mono text-cyan fw-bold" style="font-size:0.82rem;">
+                            <tr class="@(s.Status == "Active" ? "row-active" : "")">
+                                <td class="font-mono text-cyan fw-bold" style="font-size:0.78rem;">
                                     #@s.Id.ToString().Substring(0, 8).ToUpper()
                                 </td>
-                                <td class="font-mono" style="font-size:0.82rem; color:var(--text-secondary);">
+                                <td>
+                                    <span style="font-weight:600; color:var(--text-primary); font-size:0.85rem;">
+                                        @(s.GuestName ?? "Walk-in Guest")
+                                    </span>
+                                </td>
+                                <td class="font-mono" style="font-size:0.78rem; color:var(--text-secondary);">
                                     @s.RfidTagId.ToString().Substring(0, 8).ToUpper()
                                 </td>
                                 <td style="font-size:0.82rem; color:var(--text-secondary);">
-                                    @s.StartTime.ToLocalTime().ToString("MMM dd, HH:mm")
+                                    @(s.MachineName ?? "—")
                                 </td>
                                 <td style="font-size:0.82rem; color:var(--text-secondary);">
-                                    @(s.EndTime.HasValue ? s.EndTime.Value.ToLocalTime().ToString("MMM dd, HH:mm") : "—")
+                                    @s.StartTime.ToLocalTime().ToString("MMM dd, HH:mm:ss")
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @(s.EndTime.HasValue ? s.EndTime.Value.ToLocalTime().ToString("MMM dd, HH:mm:ss") : "— In Progress —")
                                 </td>
                                 <td>
-                                    <span class="badge-neon info">@(s.TotalDurationMinutes ?? 0) min</span>
+                                    @if (s.TotalDurationMinutes.HasValue)
+                                    {
+                                        <span class="badge-neon info">@s.TotalDurationMinutes min</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-neon pulse">LIVE</span>
+                                    }
                                 </td>
                                 <td>
-                                    <span class="fee-value">LKR @((s.Fee ?? 0).ToString("F2"))</span>
+                                    <span class="fee-value">@((s.Fee ?? 0).ToString("F2"))</span>
+                                </td>
+                                <td style="font-size:0.82rem; color:var(--text-secondary);">
+                                    @(s.CheckedOutByStaff ?? "—")
                                 </td>
                                 <td>
-                                    <span class="badge-neon active"><span class="bi bi-check-circle-fill"></span> Completed</span>
+                                    @if (s.Status == "Active")
+                                    {
+                                        <span class="badge-neon active"><span class="bi bi-play-circle-fill"></span> Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-neon completed"><span class="bi bi-check-circle-fill"></span> Completed</span>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -111,50 +171,50 @@
     .history-wrap { padding-bottom: 2rem; }
 
     .page-header {
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
-        gap: 1rem;
-        flex-wrap: wrap;
+        display: flex; align-items: flex-end; justify-content: space-between;
+        gap: 1rem; flex-wrap: wrap;
     }
     .page-title {
-        font-size: 1.75rem;
-        font-weight: 800;
+        font-size: 1.75rem; font-weight: 800;
         background: linear-gradient(135deg, #fff 40%, var(--neon-purple) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin: 0;
-        display: flex;
-        align-items: center;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text; margin: 0; display: flex; align-items: center;
     }
     .page-subtitle { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.3rem; }
 
+    /* Filter bar */
+    .filter-bar {
+        display: flex; align-items: center; gap: 1rem;
+        padding: 0.75rem 1.25rem; margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .filter-group { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 180px; }
+    .filter-icon { color: var(--text-disabled); font-size: 0.9rem; }
+    .filter-input { flex: 1; font-size: 0.85rem; padding: 0.5rem 0.75rem; }
+    .filter-select { width: auto; font-size: 0.85rem; padding: 0.5rem 0.75rem; }
+    .btn-clear-filter {
+        background: rgba(255,51,102,0.08); border: 1px solid rgba(255,51,102,0.3);
+        color: var(--status-error); border-radius: 6px; padding: 0.4rem 0.8rem;
+        font-size: 0.8rem; font-family: var(--font-heading); font-weight: 600;
+        cursor: pointer; transition: all 0.2s; display: flex; align-items: center;
+    }
+    .btn-clear-filter:hover { background: rgba(255,51,102,0.18); }
+
+    /* Revenue strip */
     .revenue-strip {
-        display: flex;
-        align-items: center;
-        background: var(--surface-base);
-        border: 1px solid var(--surface-border);
-        border-radius: var(--radius-md);
-        padding: 0.9rem 1.5rem;
-        flex-wrap: wrap;
-        gap: 1rem;
+        display: flex; align-items: center;
+        background: var(--surface-base); border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md); padding: 0.9rem 1.5rem;
+        flex-wrap: wrap; gap: 1rem;
     }
     .strip-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-family: var(--font-heading);
-        font-size: 0.82rem;
-        font-weight: 600;
+        display: flex; align-items: center; gap: 0.5rem;
+        font-family: var(--font-heading); font-size: 0.82rem; font-weight: 600;
         color: var(--text-secondary);
     }
     .strip-divider { width: 1px; height: 20px; background: var(--surface-border); flex-shrink: 0; }
 
     .fee-value {
-        font-family: var(--font-heading);
-        font-weight: 700;
-        font-size: 0.9rem;
+        font-family: var(--font-heading); font-weight: 700; font-size: 0.9rem;
         color: var(--status-active);
     }
 
@@ -164,13 +224,51 @@
     }
 
     .table-responsive { overflow-x: auto; padding: 0 0.5rem 1rem; }
+
+    /* Active row highlight */
+    .row-active { border-left: 3px solid var(--status-active); }
+
+    /* Completed badge */
+    .badge-neon.completed {
+        background: rgba(0,230,118,0.08); color: var(--status-active);
+        border: 1px solid rgba(0,230,118,0.25); display: inline-flex;
+        align-items: center; gap: 0.3rem; padding: 0.3rem 0.6rem;
+        border-radius: 20px; font-size: 0.7rem; font-weight: 700;
+        letter-spacing: 0.5px; text-transform: uppercase;
+    }
+
+    /* Live pulse badge */
+    .badge-neon.pulse {
+        background: rgba(0,240,255,0.08); color: var(--neon-cyan);
+        border: 1px solid rgba(0,240,255,0.25);
+        animation: livePulse 1.5s ease infinite;
+    }
+    @@keyframes livePulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
 </style>
 
 @code {
-    private List<SessionHistoryDto> sessions = new();
+    private List<SessionLogDto> allSessions = new();
     private bool isLoading = true;
-    private int totalMinutes = 0;
-    private decimal totalRevenue = 0;
+    private string searchQuery = string.Empty;
+    private string statusFilter = "All";
+
+    private List<SessionLogDto> filteredSessions => allSessions
+        .Where(s => statusFilter == "All" || s.Status == statusFilter)
+        .Where(s =>
+        {
+            if (string.IsNullOrWhiteSpace(searchQuery)) return true;
+            var q = searchQuery.ToLower();
+            return (s.GuestName?.ToLower().Contains(q) ?? false)
+                || s.RfidTagId.ToString().ToLower().Contains(q)
+                || (s.CheckedOutByStaff?.ToLower().Contains(q) ?? false)
+                || (s.MachineName?.ToLower().Contains(q) ?? false)
+                || s.Id.ToString().ToLower().Contains(q);
+        })
+        .OrderByDescending(s => s.StartTime)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -183,19 +281,25 @@
         var client = ClientFactory.CreateClient("ApiClient");
         try
         {
-            var result = await client.GetFromJsonAsync<List<SessionHistoryDto>>("/api/sessions/history");
-            sessions = result ?? new();
-            totalMinutes = sessions.Sum(s => s.TotalDurationMinutes ?? 0);
-            totalRevenue = sessions.Sum(s => s.Fee ?? 0);
+            // Load both active and completed sessions for full dispute resolution
+            var active = await client.GetFromJsonAsync<List<SessionLogDto>>("/api/sessions/active") ?? new();
+            var completed = await client.GetFromJsonAsync<List<SessionLogDto>>("/api/sessions/history") ?? new();
+            allSessions = active.Concat(completed).OrderByDescending(s => s.StartTime).ToList();
         }
         catch
         {
-            sessions = new();
+            allSessions = new();
         }
         isLoading = false;
     }
 
-    private class SessionHistoryDto
+    private void ClearFilters()
+    {
+        searchQuery = string.Empty;
+        statusFilter = "All";
+    }
+
+    private class SessionLogDto
     {
         public Guid Id { get; set; }
         public Guid RfidTagId { get; set; }
@@ -204,5 +308,9 @@
         public string Status { get; set; } = string.Empty;
         public int? TotalDurationMinutes { get; set; }
         public decimal? Fee { get; set; }
+        public string? GuestName { get; set; }
+        public string? CheckedOutByStaff { get; set; }
+        public Guid? MachineId { get; set; }
+        public string? MachineName { get; set; }
     }
 }

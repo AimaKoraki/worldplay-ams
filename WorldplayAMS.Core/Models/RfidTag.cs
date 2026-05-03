@@ -18,6 +18,12 @@ public class RfidTag : BaseModel
 
     [Column("status")]
     public string Status { get; set; } = "Active";
+
+    [Column("issuedate")]
+    public DateTime? IssueDate { get; set; }
+
+    [Column("lastuseddate")]
+    public DateTime? LastUsedDate { get; set; }
 }
 
 [Table("sessions")]
@@ -52,4 +58,7 @@ public class Session : BaseModel
 
     [Column("machineid")]
     public Guid? MachineId { get; set; }
+
+    [Column("customerid")]
+    public Guid? CustomerId { get; set; }
 }
