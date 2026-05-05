@@ -40,18 +40,45 @@ public class TransactionHistoryService
             var end = start.AddDays(1).AddTicks(-1);
             var sessions = await _repository.GetSessionsByDateRangeAsync(start, end);
             
+            var totalSessions = sessions.Count;
             var totalRevenue = sessions.Sum(s => s.Fee ?? 0);
-            var completedSessions = sessions.Count(s => s.Status == "Completed");
-            var activeSessions = sessions.Count(s => s.Status == "Active");
             var totalDuration = sessions.Sum(s => s.TotalDurationMinutes ?? 0);
+            var averageDuration = totalSessions > 0 ? (double)totalDuration / totalSessions : 0;
+            
+            var highestFee = sessions.Any() ? sessions.Max(s => s.Fee ?? 0) : 0;
+            var longestSession = sessions.Any() ? sessions.Max(s => s.TotalDurationMinutes ?? 0) : 0;
+
+            int peakHour = 0;
+            string peakHourDisplay = "N/A";
+            
+            if (sessions.Any(s => s.EndTime.HasValue))
+            {
+                var peakGroup = sessions
+                    .Where(s => s.EndTime.HasValue)
+                    .GroupBy(s => s.EndTime!.Value.ToLocalTime().Hour)
+                    .OrderByDescending(g => g.Count())
+                    .FirstOrDefault();
+                    
+                if (peakGroup != null)
+                {
+                    peakHour = peakGroup.Key;
+                    var amPm = peakHour >= 12 ? "PM" : "AM";
+                    var hour12 = peakHour % 12;
+                    if (hour12 == 0) hour12 = 12;
+                    peakHourDisplay = $"{hour12}:00 {amPm}";
+                }
+            }
 
             return new 
             {
                 Date = date.Date,
+                TotalSessions = totalSessions,
                 TotalRevenue = totalRevenue,
-                CompletedSessions = completedSessions,
-                ActiveSessions = activeSessions,
-                TotalDurationMinutes = totalDuration
+                AverageDurationMinutes = averageDuration,
+                PeakCheckOutHour = peakHour,
+                PeakCheckOutHourDisplay = peakHourDisplay,
+                HighestSingleFee = highestFee,
+                LongestSessionMinutes = longestSession
             };
         }
         catch (Exception ex)
@@ -61,14 +88,14 @@ public class TransactionHistoryService
         }
     }
 
-    public async Task LogManagerActionAsync(string managerName, string action, string? details)
+    public async Task LogManagerActionAsync(string managerName, string action, string? details, Guid? staffId = null)
     {
         try
         {
             var log = new ManagerAuditLog
             {
                 Id = Guid.NewGuid(),
-                ManagerId = Guid.Empty,
+                ManagerId = staffId ?? Guid.Empty,
                 ManagerName = managerName,
                 Action = action,
                 Details = details ?? "",

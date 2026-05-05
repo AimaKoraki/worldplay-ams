@@ -66,6 +66,7 @@ namespace WorldplayAMS.Tests.Services
             // Assert
             result.Should().Be("Success: Checked in!");
             _mockRepo.Verify(r => r.InsertSessionAsync(It.IsAny<Session>()), Times.Once);
+            _mockRepo.Verify(r => r.InsertAuditLogAsync(It.Is<ManagerAuditLog>(log => log.Action == "SESSION_CHECK_IN")), Times.Once);
         }
 
         [Fact]
@@ -98,6 +99,8 @@ namespace WorldplayAMS.Tests.Services
                 s.Status == "Completed" 
                 && s.TotalDurationMinutes >= 10 
                 && s.CheckedOutByStaff == "Test Staff")), Times.Once);
+            
+            _mockRepo.Verify(r => r.InsertAuditLogAsync(It.Is<ManagerAuditLog>(log => log.Action == "SESSION_CHECK_OUT")), Times.Once);
         }
 
         [Fact]
@@ -126,6 +129,81 @@ namespace WorldplayAMS.Tests.Services
 
             // Assert
             result.Should().Be("Error: This RFID tag has been reported lost. Please contact a manager.");
+        }
+
+        // ── DEV-20: Session Logs ─────────────────────────────────────────────
+
+        [Fact]
+        public async Task GetActiveSessionsAsync_ReturnsActiveSessions()
+        {
+            // Arrange
+            var expectedSessions = new List<Session>
+            {
+                new Session { Id = Guid.NewGuid(), Status = "Active" },
+                new Session { Id = Guid.NewGuid(), Status = "Active" }
+            };
+
+            _mockRepo.Setup(r => r.GetActiveSessionsAsync())
+                .ReturnsAsync(expectedSessions);
+
+            // Act
+            var result = await _service.GetActiveSessionsAsync();
+
+            // Assert
+            result.Should().HaveCount(2);
+            result.Should().BeEquivalentTo(expectedSessions);
+        }
+
+        [Fact]
+        public async Task GetActiveSessionsAsync_ReturnsEmptyList_WhenRepositoryThrows()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetActiveSessionsAsync())
+                .ThrowsAsync(new Exception("DB connection failed"));
+
+            // Act
+            var result = await _service.GetActiveSessionsAsync();
+
+            // Assert - silent fallback
+            result.Should().NotBeNull();
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GetCompletedSessionsAsync_ReturnsCompletedSessions()
+        {
+            // Arrange
+            var expectedSessions = new List<Session>
+            {
+                new Session { Id = Guid.NewGuid(), Status = "Completed" },
+                new Session { Id = Guid.NewGuid(), Status = "Completed" },
+                new Session { Id = Guid.NewGuid(), Status = "Completed" }
+            };
+
+            _mockRepo.Setup(r => r.GetCompletedSessionsAsync())
+                .ReturnsAsync(expectedSessions);
+
+            // Act
+            var result = await _service.GetCompletedSessionsAsync();
+
+            // Assert
+            result.Should().HaveCount(3);
+            result.Should().BeEquivalentTo(expectedSessions);
+        }
+
+        [Fact]
+        public async Task GetCompletedSessionsAsync_ReturnsEmptyList_WhenRepositoryThrows()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetCompletedSessionsAsync())
+                .ThrowsAsync(new Exception("DB connection failed"));
+
+            // Act
+            var result = await _service.GetCompletedSessionsAsync();
+
+            // Assert - silent fallback
+            result.Should().NotBeNull();
+            result.Should().BeEmpty();
         }
     }
 }
