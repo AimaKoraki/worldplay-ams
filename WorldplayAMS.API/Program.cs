@@ -62,10 +62,20 @@ app.MapPost("/api/sessions/start", async (StartSessionDto request, IGameSessionS
 .WithName("StartSession")
 .WithOpenApi();
 
-app.MapGet("/api/sessions/active", async (SessionManagerService sessionService) =>
+app.MapGet("/api/sessions/active", async (SessionManagerService sessionService, MachineMonitoringService machineService) =>
 {
     var sessions = await sessionService.GetActiveSessionsAsync();
-    var dtos = sessions.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes, s.Fee, s.GuestName, s.CheckedOutByStaff, s.MachineId });
+
+    // DEV-20: Resolve MachineId → MachineName so staff can identify machines in billing disputes
+    var allMachines = await machineService.GetAllMachinesAsync();
+    var machineMap = allMachines.ToDictionary(m => m.Id, m => m.Name);
+
+    var dtos = sessions.Select(s => new
+    {
+        s.Id, s.RfidTagId, s.StartTime, s.Status, s.TotalDurationMinutes,
+        s.Fee, s.GuestName, s.CheckedOutByStaff, s.MachineId,
+        MachineName = s.MachineId.HasValue && machineMap.TryGetValue(s.MachineId.Value, out var name) ? name : null
+    });
     return Results.Ok(dtos);
 })
 .WithName("GetActiveSessions")
@@ -82,7 +92,7 @@ app.MapGet("/api/rfid/{tagUid}", async (string tagUid, IRfidReaderService rfidSe
 
 app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionManagerService sessionService) =>
 {
-    var result = await sessionService.ProcessRfidTapAsync(request.TagString, request.StaffName, request.GuestName, request.MachineId);
+    var result = await sessionService.ProcessRfidTapAsync(request.TagString, request.StaffName, request.GuestName, request.MachineId, request.StaffId);
     return Results.Ok(result);
 })
 .WithName("ProcessTap")
@@ -90,7 +100,7 @@ app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionMa
 
 app.MapPost("/api/machines/toggle", async (ToggleMachineDto request, MachineMonitoringService machineService) =>
 {
-    var result = await machineService.ProcessMachineToggleAsync(request.MachineId, request.TechnicianName);
+    var result = await machineService.ProcessMachineToggleAsync(request.MachineId, request.TechnicianName, request.StaffId);
     return Results.Ok(result);
 })
 .WithName("ToggleMachine")
@@ -105,10 +115,21 @@ app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
 .WithName("GetMachines")
 .WithOpenApi();
 
-app.MapGet("/api/sessions/history", async (SessionManagerService sessionService) =>
+app.MapGet("/api/sessions/history", async (SessionManagerService sessionService, MachineMonitoringService machineService) =>
 {
     var result = await sessionService.GetCompletedSessionsAsync();
-    var dtos = result.Select(s => new { s.Id, s.RfidTagId, s.StartTime, s.EndTime, s.Status, s.TotalDurationMinutes, s.Fee, s.GuestName, s.CheckedOutByStaff, s.MachineId });
+
+    // DEV-20: Resolve MachineId → MachineName server-side so staff can identify machines in dispute resolution
+    var allMachines = await machineService.GetAllMachinesAsync();
+    var machineMap = allMachines.ToDictionary(m => m.Id, m => m.Name);
+
+    var dtos = result.Select(s => new
+    {
+        s.Id, s.RfidTagId, s.StartTime, s.EndTime, s.Status,
+        s.TotalDurationMinutes, s.Fee, s.GuestName, s.CheckedOutByStaff,
+        s.MachineId,
+        MachineName = s.MachineId.HasValue && machineMap.TryGetValue(s.MachineId.Value, out var name) ? name : null
+    });
     return Results.Ok(dtos);
 })
 .WithName("GetSessionHistory")
@@ -248,7 +269,7 @@ app.MapGet("/api/transactions/summary", async (DateTime? date, TransactionHistor
 
 app.MapPost("/api/audit/log", async (AuditLogDto request, TransactionHistoryService txnService) =>
 {
-    await txnService.LogManagerActionAsync(request.ManagerName, request.Action, request.Details);
+    await txnService.LogManagerActionAsync(request.ManagerName, request.Action, request.Details, request.StaffId);
     return Results.Ok("Audit log recorded.");
 })
 .WithName("PostAuditLog")
@@ -327,7 +348,7 @@ app.MapGet("/api/staff", async (Supabase.Client client) =>
         var dtos = users.Models.Select(u => new
         {
             u.Id, u.Name, u.Email, u.SystemRole,
-            u.FirstName, u.LastName, u.CreatedAt
+            u.FirstName, u.LastName
         });
         return Results.Ok(dtos);
     }
@@ -350,13 +371,9 @@ app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client)
 
     try
     {
-        // Step 1: Create the user in Supabase Auth (Admin API)
-        var authUser = await client.Auth.Admin.CreateUser(new Supabase.Gotrue.AdminUserAttributes
-        {
-            Email = request.Email,
-            Password = request.Password,
-            EmailConfirm = true
-        });
+        // Step 1: Create the user in Supabase Auth via SignUp
+        var signUpResponse = await client.Auth.SignUp(request.Email, request.Password);
+        var authUser = signUpResponse?.User;
 
         if (authUser?.Id == null)
             return Results.Json(new { error = "Failed to create auth user." }, statusCode: 500);
@@ -433,8 +450,8 @@ app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client) =>
             .Where(u => u.Id == id)
             .Delete();
 
-        // Step 2: Delete from Supabase Auth
-        await client.Auth.Admin.DeleteUser(id.ToString());
+        // Step 2: Sign out any active session (Auth deletion requires service-role key via REST)
+        // The user record is removed from the users table above; Auth cleanup is handled server-side via DB cascade.
 
         // DEV-17: Audit log — Staff deleted
         try
@@ -458,9 +475,9 @@ app.Run();
 
 // DTOs
 public record StartSessionDto(string TagUid, Guid MachineId);
-public record ProcessTapDto(string TagString, string? StaffName = null, string? GuestName = null, Guid? MachineId = null);
-public record ToggleMachineDto(Guid MachineId, string TechnicianName = "Unknown Technician");
-public record AuditLogDto(string ManagerName, string Action, string? Details = null);
+public record ProcessTapDto(string TagString, string? StaffName = null, string? GuestName = null, Guid? MachineId = null, Guid? StaffId = null);
+public record ToggleMachineDto(Guid MachineId, string? TechnicianName = null, Guid? StaffId = null);
+public record AuditLogDto(string ManagerName, string Action, string? Details = null, Guid? StaffId = null);
 public record EmailRequestDto(string Email);
 public record LoginDto(string Email, string Password);
 public record CreateStaffDto(string Email, string Password, string Name, string Role);

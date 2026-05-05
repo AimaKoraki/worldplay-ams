@@ -25,7 +25,7 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
             _ratePerMinute = configuration.GetValue<decimal>("Billing:RatePerMinute", 0.15m);
         }
 
-        public async Task<string> ProcessRfidTapAsync(string tagString, string? staffName = null, string? guestName = null, Guid? machineId = null)
+        public async Task<string> ProcessRfidTapAsync(string tagString, string? staffName = null, string? guestName = null, Guid? machineId = null, Guid? staffId = null)
         {
             try
             {
@@ -58,6 +58,7 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
                     await _repository.InsertAuditLogAsync(new ManagerAuditLog
                     {
                         Id = Guid.NewGuid(),
+                        ManagerId = staffId ?? Guid.Empty,
                         ManagerName = staffName ?? "Unknown",
                         Action = "SESSION_CHECK_IN",
                         Details = $"Tag: {tagString} | Guest: {guestName ?? "Walk-in Guest"} | Machine: {machineId?.ToString() ?? "None"}",
@@ -100,6 +101,7 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
                     await _repository.InsertAuditLogAsync(new ManagerAuditLog
                     {
                         Id = Guid.NewGuid(),
+                        ManagerId = staffId ?? Guid.Empty,
                         ManagerName = staffName ?? "Unknown",
                         Action = "SESSION_CHECK_OUT",
                         Details = $"Tag: {tagString} | Guest: {session.GuestName} | Duration: {session.TotalDurationMinutes} min | Fee: LKR {session.Fee:F2} | Staff: {session.CheckedOutByStaff}",

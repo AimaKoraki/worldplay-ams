@@ -31,8 +31,9 @@ public class EmailService : IEmailService
             var subject = $"Your Receipt from Worldplay - {receipt.ReceiptNumber}";
             var body = GenerateEmailBody(receipt);
 
-            // Simulation fallback if SMTP is not configured
-            if (string.IsNullOrEmpty(host) || host == "placeholder_host" || !int.TryParse(portString, out var port))
+            // Simulation fallback if SMTP is not configured or password is still a placeholder
+            if (string.IsNullOrEmpty(host) || host == "placeholder_host" || !int.TryParse(portString, out var port)
+                || string.IsNullOrEmpty(password) || (password?.StartsWith("PASTE_") ?? false))
             {
                 _logger.LogInformation("SMTP not configured. Simulating email send to {ToEmail}.", toEmail);
                 _logger.LogInformation("Email Subject: {Subject}", subject);

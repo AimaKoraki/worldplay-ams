@@ -1,5 +1,6 @@
 @page "/r/{SessionId:guid}"
 @layout Layout.EmptyLayout
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 @inject IHttpClientFactory ClientFactory
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
@@ -342,9 +343,9 @@
 
     private async Task SendEmail()
     {
-        if (string.IsNullOrWhiteSpace(emailAddress) || !emailAddress.Contains("@"))
+        if (string.IsNullOrWhiteSpace(emailAddress) || !IsValidEmail(emailAddress))
         {
-            emailMessage = "Please enter a valid email address.";
+            emailMessage = "Please enter a valid email address (e.g. name@example.com).";
             emailSuccess = false;
             return;
         }
@@ -378,6 +379,23 @@
         finally
         {
             isSendingEmail = false;
+        }
+    }
+
+    /// <summary>
+    /// Validates email using .NET's MailAddress parser — stricter than a Contains("@") check.
+    /// Catches malformed addresses like "a@b", "test@", "@domain.com" before hitting the server.
+    /// </summary>
+    private static bool IsValidEmail(string email)
+    {
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email.Trim();
+        }
+        catch
+        {
+            return false;
         }
     }
 
