@@ -3,6 +3,7 @@ using WorldplayAMS.Core.Models;
 using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
+using WorldplayAMS.Core.Interfaces;
 
 namespace WorldplayAMS.API.Services;
 
@@ -19,7 +20,7 @@ public class MachineMonitoringService
         _logger = logger;
     }
 
-    public async Task<string> ProcessMachineToggleAsync(Guid machineId, string technicianName = "Unknown Technician")
+    public async Task<string> ProcessMachineToggleAsync(Guid machineId, string technicianName = "Unknown Technician", Guid? staffId = null)
     {
         try
         {
@@ -48,7 +49,7 @@ public class MachineMonitoringService
                 await _repository.InsertAuditLogAsync(new ManagerAuditLog
                 {
                     Id = Guid.NewGuid(),
-                    ManagerId = Guid.Empty, // Technician actions don't map to a strict User ID right now
+                    ManagerId = staffId ?? Guid.Empty,
                     ManagerName = technicianName,
                     Action = "StartMachineSession",
                     Details = $"Started session on machine: {machineName} ({machineId})"
@@ -78,7 +79,7 @@ public class MachineMonitoringService
                 await _repository.InsertAuditLogAsync(new ManagerAuditLog
                 {
                     Id = Guid.NewGuid(),
-                    ManagerId = Guid.Empty,
+                    ManagerId = staffId ?? Guid.Empty,
                     ManagerName = technicianName,
                     Action = "StopMachineSession",
                     Details = $"Stopped session on machine: {machineName} ({machineId}). Duration: {log.DurationMinutes} min."

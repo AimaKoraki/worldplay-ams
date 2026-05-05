@@ -2,6 +2,7 @@
 @using WorldplayAMS.UI.Auth
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
+@inject IWebHostEnvironment Env
 
 <PageTitle>Worldplay AMS — Authentication</PageTitle>
 
@@ -40,47 +41,93 @@
                     <span class="bi bi-fingerprint" style="font-size: 2rem; color: var(--neon-cyan);"></span>
                 </div>
                 <h1 class="login-title">Staff Portal</h1>
-                <p class="login-desc">Select your access level to continue</p>
+                <p class="login-desc">Sign in with your credentials to continue</p>
             </div>
 
-            <div class="login-roles">
-                <button class="login-role-btn role-admin" @onclick='() => DemoLogin("Admin")'>
-                    <div class="role-icon">
-                        <span class="bi bi-shield-lock-fill"></span>
-                    </div>
-                    <div class="role-info">
-                        <span class="role-name">Administrator</span>
-                        <span class="role-desc">Full system access</span>
-                    </div>
-                    <span class="bi bi-chevron-right role-arrow"></span>
-                </button>
+            <!-- Real Login Form -->
+            <div class="login-form">
+                <div class="form-group mb-3">
+                    <label class="form-label-custom">
+                        <span class="bi bi-envelope-fill me-2"></span>Email
+                    </label>
+                    <input id="input-email" type="email" class="form-input login-input" placeholder="you@worldplay.com"
+                           @bind="email" @onkeyup="HandleKeyUp" disabled="@isLoading" />
+                </div>
+                <div class="form-group mb-3">
+                    <label class="form-label-custom">
+                        <span class="bi bi-lock-fill me-2"></span>Password
+                    </label>
+                    <input id="input-password" type="password" class="form-input login-input" placeholder="Enter your password"
+                           @bind="password" @onkeyup="HandleKeyUp" disabled="@isLoading" />
+                </div>
 
-                <button class="login-role-btn role-tech" @onclick='() => DemoLogin("Technician")'>
-                    <div class="role-icon">
-                        <span class="bi bi-wrench-adjustable-circle-fill"></span>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="login-error">
+                        <span class="bi bi-exclamation-triangle-fill me-2"></span>@errorMessage
                     </div>
-                    <div class="role-info">
-                        <span class="role-name">Technician</span>
-                        <span class="role-desc">Diagnostics & hardware</span>
-                    </div>
-                    <span class="bi bi-chevron-right role-arrow"></span>
-                </button>
+                }
 
-                <button class="login-role-btn role-staff" @onclick='() => DemoLogin("Staff")'>
-                    <div class="role-icon">
-                        <span class="bi bi-person-badge-fill"></span>
-                    </div>
-                    <div class="role-info">
-                        <span class="role-name">Staff</span>
-                        <span class="role-desc">Check-in & operations</span>
-                    </div>
-                    <span class="bi bi-chevron-right role-arrow"></span>
+                <button id="btn-login" class="btn-login-submit" @onclick="HandleLogin" disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Authenticating...</span>
+                    }
+                    else
+                    {
+                        <span class="bi bi-box-arrow-in-right me-2"></span>
+                        <span>Sign In</span>
+                    }
                 </button>
             </div>
+
+            @if (isDevelopment)
+            {
+                <!-- Dev-only quick access -->
+                <div class="dev-divider">
+                    <span>DEV MODE — Quick Access</span>
+                </div>
+
+                <div class="login-roles">
+                    <button class="login-role-btn role-admin" @onclick='() => DemoLogin("Admin")'>
+                        <div class="role-icon">
+                            <span class="bi bi-shield-lock-fill"></span>
+                        </div>
+                        <div class="role-info">
+                            <span class="role-name">Administrator</span>
+                            <span class="role-desc">Full system access</span>
+                        </div>
+                        <span class="bi bi-chevron-right role-arrow"></span>
+                    </button>
+
+                    <button class="login-role-btn role-tech" @onclick='() => DemoLogin("Technician")'>
+                        <div class="role-icon">
+                            <span class="bi bi-wrench-adjustable-circle-fill"></span>
+                        </div>
+                        <div class="role-info">
+                            <span class="role-name">Technician</span>
+                            <span class="role-desc">Diagnostics & hardware</span>
+                        </div>
+                        <span class="bi bi-chevron-right role-arrow"></span>
+                    </button>
+
+                    <button class="login-role-btn role-staff" @onclick='() => DemoLogin("Staff")'>
+                        <div class="role-icon">
+                            <span class="bi bi-person-badge-fill"></span>
+                        </div>
+                        <div class="role-info">
+                            <span class="role-name">Staff</span>
+                            <span class="role-desc">Check-in & operations</span>
+                        </div>
+                        <span class="bi bi-chevron-right role-arrow"></span>
+                    </button>
+                </div>
+            }
 
             <div class="login-footer">
                 <span class="bi bi-lock-fill me-1" style="font-size:0.7rem;"></span>
-                Secured via Supabase Auth · Demo Mode
+                Secured via Supabase Auth@(isDevelopment ? " · Dev Mode" : "")
             </div>
         </div>
 
@@ -188,6 +235,88 @@
     }
     .login-desc { color: var(--text-secondary); font-size: 0.875rem; }
 
+    /* Login form */
+    .login-form { margin-bottom: 1.5rem; }
+
+    .form-label-custom {
+        display: flex;
+        align-items: center;
+        font-family: var(--font-heading);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-bottom: 0.4rem;
+    }
+
+    .login-input {
+        width: 100%;
+        font-size: 0.9rem;
+        padding: 0.8rem 1rem;
+    }
+
+    .login-error {
+        background: rgba(255,51,102,0.08);
+        border: 1px solid rgba(255,51,102,0.3);
+        border-radius: 8px;
+        padding: 0.7rem 1rem;
+        color: var(--status-error);
+        font-size: 0.82rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        animation: slideUp 0.25s ease;
+    }
+
+    .btn-login-submit {
+        width: 100%;
+        padding: 0.9rem;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--electric-blue), var(--neon-cyan));
+        color: #fff;
+        font-family: var(--font-heading);
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 16px rgba(32,96,255,0.35);
+    }
+    .btn-login-submit:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 24px rgba(32,96,255,0.5);
+    }
+    .btn-login-submit:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    /* Dev mode divider */
+    .dev-divider {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin: 1.5rem 0 1rem;
+    }
+    .dev-divider::before, .dev-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--surface-border);
+    }
+    .dev-divider span {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--neon-amber);
+        white-space: nowrap;
+    }
+
     /* Role buttons */
     .login-roles { display: flex; flex-direction: column; gap: 0.85rem; margin-bottom: 1.75rem; }
 
@@ -246,6 +375,75 @@
 </style>
 
 @code {
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool isLoading = false;
+    private bool isDevelopment = false;
+
+    protected override void OnInitialized()
+    {
+        isDevelopment = Env.IsDevelopment();
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !isLoading)
+        {
+            await HandleLogin();
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Please enter both email and password.";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        if (AuthStateProvider is SupabaseAuthStateProvider supabaseProvider)
+        {
+            var error = await supabaseProvider.LoginAsync(email, password);
+            if (error == null)
+            {
+                Nav.NavigateTo("/", forceLoad: true);
+                return;
+            }
+            errorMessage = error;
+        }
+        else if (AuthStateProvider is SimulatedAuthStateProvider)
+        {
+            // In dev mode, if someone uses the form, try the API anyway
+            var client = new HttpClient { BaseAddress = new Uri("http://localhost:5089") };
+            try
+            {
+                var response = await client.PostAsJsonAsync("/api/auth/login", new { Email = email, Password = password });
+                if (response.IsSuccessStatusCode)
+                {
+                    var data = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                    if (data != null)
+                    {
+                        // Use the simulated provider with the real role from DB
+                        ((SimulatedAuthStateProvider)AuthStateProvider).LoginAs(data.Role);
+                        Nav.NavigateTo("/");
+                        return;
+                    }
+                }
+                errorMessage = "Invalid email or password.";
+            }
+            catch
+            {
+                errorMessage = "API unavailable. Use the quick-access buttons below.";
+            }
+        }
+
+        isLoading = false;
+    }
+
     private void DemoLogin(string role)
     {
         if (AuthStateProvider is SimulatedAuthStateProvider simulatedProvider)
@@ -253,5 +451,13 @@
             simulatedProvider.LoginAs(role);
             Nav.NavigateTo("/");
         }
+    }
+
+    private class LoginResponse
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Role { get; set; } = "Staff";
+        public bool Authenticated { get; set; }
     }
 }
