@@ -146,8 +146,8 @@
                     <button class="btn-neon btn-neon-cyan" style="font-size:0.75rem; padding:0.4rem 0.8rem;" @onclick="CopyPublicLink">
                         <span class="bi bi-link-45deg"></span> Link
                     </button>
-                    <button class="btn-neon btn-neon-green" style="font-size:0.75rem; padding:0.4rem 0.8rem;" @onclick="DownloadPdf">
-                        <span class="bi bi-download"></span> PDF
+                    <button class="btn-neon btn-neon-green" style="font-size:0.75rem; padding:0.4rem 0.8rem;" @onclick="PrintReceipt">
+                        <span class="bi bi-printer"></span> Print / PDF
                     </button>
                     <button class="btn-neon btn-neon-red btn-sm" @onclick="CloseDetail">
                         <span class="bi bi-x-lg"></span>
@@ -155,8 +155,8 @@
                 </div>
             </div>
 
-            <!-- Branded receipt -->
-            <div class="receipt-paper">
+            <!-- Branded receipt (id required for print scope) -->
+            <div class="receipt-paper" id="printable-receipt">
                 <div class="receipt-brand">
                     <div class="receipt-logo"><span class="bi bi-controller"></span></div>
                     <div>
@@ -352,6 +352,25 @@
     .receipt-issued-at { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-disabled); }
 
     @@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    /* ── PRINT STYLES ──────────────────────────────────────────── */
+    @@media print {
+        body > * { display: none !important; }
+        #printable-receipt {
+            display: block !important;
+            position: fixed;
+            inset: 0;
+            background: #fff !important;
+            color: #000 !important;
+            padding: 2rem;
+            font-size: 11pt;
+        }
+        #printable-receipt .receipt-brand-name,
+        #printable-receipt .receipt-num-value,
+        #printable-receipt .receipt-total-value { color: #000 !important; }
+        #printable-receipt .receipt-field-label,
+        #printable-receipt .receipt-issued-at { color: #555 !important; }
+    }
 </style>
 
 @code {
@@ -465,43 +484,14 @@
         await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", url);
     }
 
-    private void DownloadPdf()
+    /// <summary>
+    /// Triggers the browser's native Print dialog scoped to the receipt-paper element.
+    /// The user can "Save as PDF" from the print dialog — zero server-side dependencies.
+    /// </summary>
+    private async Task PrintReceipt()
     {
         if (selectedReceipt == null) return;
-        var r = selectedReceipt;
-        var machine = r.MachineName ?? "N/A";
-        var tag = r.RfidTagId.ToString()[..8].ToUpper();
-        var sid = r.SessionId.ToString()[..8].ToUpper();
-        var lines = new List<string>
-        {
-            "WORLDPLAY ARCADE MANAGEMENT SYSTEM",
-            "========================================",
-            "DIGITAL RECEIPT",
-            "========================================",
-            "Receipt #:    " + r.ReceiptNumber,
-            "Status:       " + r.Status,
-            "Issued:       " + r.IssuedAt.ToLocalTime().ToString("MMM dd yyyy, HH:mm:ss"),
-            "----------------------------------------",
-            "Guest Name:   " + r.GuestName,
-            "Machine:      " + machine,
-            "RFID Tag:     " + tag,
-            "Session:      " + sid,
-            "----------------------------------------",
-            "Check-In:     " + r.CheckInTime.ToLocalTime().ToString("MMM dd yyyy, HH:mm"),
-            "Check-Out:    " + r.CheckOutTime.ToLocalTime().ToString("MMM dd yyyy, HH:mm"),
-            "Duration:     " + r.DurationMinutes + " minutes",
-            "----------------------------------------",
-            "Processed By: " + r.StaffName,
-            "",
-            "========================================",
-            "TOTAL:        LKR " + r.Fee.ToString("F2"),
-            "========================================",
-            "Thank you for visiting Worldplay!"
-        };
-        var content = string.Join("\n", lines);
-        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
-        var base64 = Convert.ToBase64String(bytes);
-        Nav.NavigateTo($"data:text/plain;base64,{base64}", true);
+        await JSRuntime.InvokeVoidAsync("window.print");
     }
 
     private class ReceiptDto

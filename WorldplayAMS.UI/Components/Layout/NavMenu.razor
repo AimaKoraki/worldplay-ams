@@ -59,6 +59,12 @@
                             Digital Receipts
                         </NavLink>
                     </div>
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="admin/staff">
+                            <span class="bi bi-people-fill nav-icon"></span>
+                            Staff Management
+                        </NavLink>
+                    </div>
                 </AuthorizeView>
                 <AuthorizeView Roles="Admin,Technician" Context="techContext">
                     <div class="nav-item mb-1">
@@ -102,12 +108,17 @@
 </div>
 
 @code {
-    private void Logout()
+    private async Task Logout()
     {
         if (AuthStateProvider is SimulatedAuthStateProvider simulatedProvider)
         {
             simulatedProvider.Logout();
             Nav.NavigateTo("/login");
+        }
+        else if (AuthStateProvider is SupabaseAuthStateProvider supabaseProvider)
+        {
+            await supabaseProvider.LogoutAsync();
+            Nav.NavigateTo("/login", forceLoad: true);
         }
     }
 }

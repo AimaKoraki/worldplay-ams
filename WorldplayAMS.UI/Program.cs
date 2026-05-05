@@ -23,7 +23,16 @@ builder.Services.AddAuthentication(options =>
 });
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider, WorldplayAMS.UI.Auth.SimulatedAuthStateProvider>();
+
+// DEV-16: Use real Supabase auth in Production, simulated auth in Development
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddScoped<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider, WorldplayAMS.UI.Auth.SimulatedAuthStateProvider>();
+}
+else
+{
+    builder.Services.AddScoped<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider, WorldplayAMS.UI.Auth.SupabaseAuthStateProvider>();
+}
 
 var app = builder.Build();
 
