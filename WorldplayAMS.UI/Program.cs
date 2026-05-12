@@ -12,6 +12,8 @@ builder.Services.AddHttpClient("ApiClient", client =>
     client.BaseAddress = new Uri("http://localhost:5089");
 });
 
+builder.Services.AddScoped<WorldplayAMS.UI.Services.IReceiptViewerService, WorldplayAMS.UI.Services.ReceiptViewerService>();
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = "BlazorServer";

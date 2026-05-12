@@ -88,11 +88,11 @@
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Started</span>
-                            <span class="meta-value">@log.StartTime.ToLocalTime().ToString("MMM dd, HH:mm")</span>
+                            <span class="meta-value">@log.StartTime.ToSriLankaTime().ToString("MMM dd, HH:mm")</span>
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Ended</span>
-                            <span class="meta-value">@(log.EndTime.HasValue ? log.EndTime.Value.ToLocalTime().ToString("MMM dd, HH:mm") : "In Progress")</span>
+                            <span class="meta-value">@(log.EndTime.HasValue ? log.EndTime.Value.ToSriLankaTime().ToString("MMM dd, HH:mm") : "In Progress")</span>
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Duration</span>

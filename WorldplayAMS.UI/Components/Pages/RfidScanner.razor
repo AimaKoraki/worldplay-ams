@@ -63,7 +63,7 @@
                                 <span class="bi bi-clock-fill" style="color:var(--neon-amber);"></span>
                                 <div>
                                     <span class="billing-label">Duration</span>
-                                    <span class="billing-value">@checkoutDuration min</span>
+                                    <span class="billing-value">@checkoutDuration</span>
                                 </div>
                             </div>
                             <div class="billing-divider"></div>
@@ -555,10 +555,12 @@
             displayMessage = "Session completed — see billing below";
             try
             {
-                // API returns: "Success: Checked out. Duration: X min | Fee: LKR Y.YY"
+                // API returns: "Success: Checked out. Duration: X min Y sec | Fee: LKR Y.YY"
                 var durationStart = message.IndexOf("Duration:") + 9;
-                var durationEnd = message.IndexOf(" min");
-                checkoutDuration = message.Substring(durationStart, durationEnd - durationStart).Trim();
+                var durationEnd = message.IndexOf(" | Fee:");
+                checkoutDuration = durationEnd > durationStart
+                    ? message.Substring(durationStart, durationEnd - durationStart).Trim()
+                    : message.Substring(durationStart).Split('|')[0].Trim();
 
                 // Look for "LKR " marker — skip past it to get the number
                 var lkrIndex = message.IndexOf("LKR");
