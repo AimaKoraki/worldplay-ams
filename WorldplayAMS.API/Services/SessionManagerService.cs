@@ -58,7 +58,7 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
                     await _repository.InsertAuditLogAsync(new ManagerAuditLog
                     {
                         Id = Guid.NewGuid(),
-                        ManagerId = staffId ?? Guid.Empty,
+                        ManagerId = staffId,  // null when no staff authenticated — avoids FK violation with Guid.Empty
                         ManagerName = staffName ?? "Unknown",
                         Action = "SESSION_CHECK_IN",
                         Details = $"Tag: {tagString} | Guest: {guestName ?? "Walk-in Guest"} | Machine: {machineId?.ToString() ?? "None"}",
@@ -75,14 +75,24 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
                     session.EndTime = endTime;
                     session.Status = "Completed";
 
-                    // Force StartTime to UTC — Postgrest deserializes TIMESTAMPTZ as Unspecified kind
-                    var startUtc = session.StartTime.Kind == DateTimeKind.Utc
-                        ? session.StartTime
-                        : DateTime.SpecifyKind(session.StartTime, DateTimeKind.Utc);
+                    if (session.StartTime.Kind != DateTimeKind.Utc)
+                        _logger.LogWarning("StartTime returned from DB with Kind={Kind} (value={Value}). Converting to UTC.", session.StartTime.Kind, session.StartTime);
+                    
+                    // Supabase Postgres often returns timestamp without timezone as Unspecified but it represents Local time.
+                    // By specifying it as Local first, ToUniversalTime() correctly shifts it back to the original UTC value.
+                    var startUtc = session.StartTime.Kind == DateTimeKind.Unspecified 
+                        ? DateTime.SpecifyKind(session.StartTime, DateTimeKind.Local).ToUniversalTime()
+                        : session.StartTime.ToUniversalTime();
 
                     var durationMinutes = (endTime - startUtc).TotalMinutes;
-                    // Minimum 1 minute floor — prevents negative values from clock skew or rapid demo taps
-                    session.TotalDurationMinutes = (int)Math.Max(1, Math.Ceiling(durationMinutes));
+                    var durationSeconds = (int)Math.Round((endTime - startUtc).TotalSeconds);
+                    
+                    // Failsafe: prevent negative durations if DB data is corrupted
+                    if (durationMinutes < 0) durationMinutes = 0;
+                    if (durationSeconds < 0) durationSeconds = 0;
+
+                    // Ceiling for billing, but no artificial 1-min floor
+                    session.TotalDurationMinutes = (int)Math.Ceiling(durationMinutes);
                     session.Fee = session.TotalDurationMinutes * _ratePerMinute;
                     session.CheckedOutByStaff = staffName ?? "Unknown";
 
@@ -101,16 +111,23 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
                     await _repository.InsertAuditLogAsync(new ManagerAuditLog
                     {
                         Id = Guid.NewGuid(),
-                        ManagerId = staffId ?? Guid.Empty,
+                        ManagerId = staffId,  // null when no staff authenticated — avoids FK violation with Guid.Empty
                         ManagerName = staffName ?? "Unknown",
                         Action = "SESSION_CHECK_OUT",
                         Details = $"Tag: {tagString} | Guest: {session.GuestName} | Duration: {session.TotalDurationMinutes} min | Fee: LKR {session.Fee:F2} | Staff: {session.CheckedOutByStaff}",
                         Timestamp = DateTime.UtcNow
                     });
 
+                    // Format duration as MM:SS for the response message
+                    var displayMins = durationSeconds / 60;
+                    var displaySecs = durationSeconds % 60;
+                    var durationDisplay = displaySecs > 0
+                        ? $"{displayMins} min {displaySecs} sec"
+                        : $"{displayMins} min";
+
                     _logger.LogInformation("Check-out completed by staff '{Staff}' for tag '{Tag}' at {Time:u}. Duration: {Duration} min, Fee: LKR {Fee:F2}",
                         session.CheckedOutByStaff, tagString, session.EndTime.Value, session.TotalDurationMinutes, session.Fee);
-                    return $"Success: Checked out. Duration: {session.TotalDurationMinutes} min | Fee: LKR {session.Fee:F2}";
+                    return $"Success: Checked out. Duration: {durationDisplay} | Fee: LKR {session.Fee:F2}";
                 }
             }
             catch (Exception ex)

@@ -95,7 +95,7 @@ public class TransactionHistoryService
             var log = new ManagerAuditLog
             {
                 Id = Guid.NewGuid(),
-                ManagerId = staffId ?? Guid.Empty,
+                ManagerId = staffId == Guid.Empty ? null : staffId,
                 ManagerName = managerName,
                 Action = action,
                 Details = details ?? "",

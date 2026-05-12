@@ -18,24 +18,25 @@ public class GameSessionService : IGameSessionService
         _logger = logger;
     }
 
-    public async Task<GameSession?> StartSessionAsync(string tagUid, Guid machineId)
+    public async Task<Session?> StartSessionAsync(string tagUid, Guid machineId)
     {
         // For sub-3 sec speed, we can first optionally check local tag cache, but let's do a fast insert.
-        var session = new GameSession
+        var session = new Session
         {
             Id = Guid.NewGuid(),
             MachineId = machineId,
-            StartedAt = DateTime.UtcNow,
-            // We would map tagUid to an actual RfidTag Id. Assuming for now we resolve it.
-            // Let's assume tagUid is used to lookup the actual tag id. 
+            GuestName = "Walk-in Guest",
+            Status = "Active",
+            StartTime = DateTime.UtcNow,
+
         };
 
         try
         {
             // Resolve RfidTagId
-            var tagResponse = await _supabase.From<RfidTag>()
+            var tagResponse = (await _supabase.From<RfidTag>()
                                 .Where(t => t.TagString == tagUid && t.Status == "Active")
-                                .Single();
+                                .Get()).Models.FirstOrDefault();
             
             if (tagResponse == null) 
             {
@@ -44,9 +45,20 @@ public class GameSessionService : IGameSessionService
             }
 
             session.RfidTagId = tagResponse.Id;
+
+            var activeSession = (await _supabase.From<Session>()
+                .Where(s => s.RfidTagId == tagResponse.Id && s.Status == "Active")
+                .Get()).Models.FirstOrDefault();
+
+            if (activeSession != null)
+            {
+                _cache.Set($"session_{activeSession.Id}", activeSession, TimeSpan.FromHours(2));
+                return activeSession;
+            }
+
             // E.g., subtract cost from tag etc, skipped for brevity
 
-            var response = await _supabase.From<GameSession>().Insert(session);
+            var response = await _supabase.From<Session>().Insert(session);
             var resultingSession = response.Models.FirstOrDefault();
 
             if (resultingSession != null)
@@ -67,20 +79,20 @@ public class GameSessionService : IGameSessionService
         }
     }
 
-    public async Task<IEnumerable<GameSession>> GetActiveSessionsAsync()
+    public async Task<IEnumerable<Session>> GetActiveSessionsAsync()
     {
         try
         {
-            var response = await _supabase.From<GameSession>()
-                .Where(s => s.DurationSeconds == null)
+            var response = await _supabase.From<Session>()
+                .Where(s => s.Status == "Active")
                 .Get();
                 
-            return response.Models ?? new List<GameSession>();
+            return response.Models ?? new List<Session>();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get sessions. Returning cached/empty.");
-            return new List<GameSession>();
+            return new List<Session>();
         }
     }
 }

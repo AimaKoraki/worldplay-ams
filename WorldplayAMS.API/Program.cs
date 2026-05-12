@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
 
 // Supabase Configuration
 var supabaseUrl = builder.Configuration["Supabase:Url"] ?? "https://placeholder.supabase.co";
@@ -100,7 +101,7 @@ app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionMa
 
 app.MapPost("/api/machines/toggle", async (ToggleMachineDto request, MachineMonitoringService machineService) =>
 {
-    var result = await machineService.ProcessMachineToggleAsync(request.MachineId, request.TechnicianName, request.StaffId);
+    var result = await machineService.ProcessMachineToggleAsync(request.MachineId, request.TechnicianName ?? "Unknown Technician", request.StaffId);
     return Results.Ok(result);
 })
 .WithName("ToggleMachine")
@@ -360,7 +361,7 @@ app.MapGet("/api/staff", async (Supabase.Client client) =>
 .WithName("GetAllStaff")
 .WithOpenApi();
 
-app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client) =>
+app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client, IHttpClientFactory httpClientFactory, IConfiguration config) =>
 {
     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
         return Results.BadRequest(new { error = "Email, password, and name are required." });
@@ -371,14 +372,39 @@ app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client)
 
     try
     {
-        // Step 1: Create the user in Supabase Auth via SignUp
-        var signUpResponse = await client.Auth.SignUp(request.Email, request.Password);
-        var authUser = signUpResponse?.User;
+        // DEV-52: Use the Supabase Admin API instead of client.Auth.SignUp().
+        // SignUp() mutates the shared singleton Supabase.Client's auth session (replacing the
+        // service-role session with the new user's session), breaking all subsequent DB calls.
+        // The Admin API creates the user server-side, confirms email automatically so the
+        // account is immediately usable, and leaves the singleton's session untouched.
+        var supabaseUrl = config["Supabase:Url"]!;
+        var serviceRoleKey = config["Supabase:Key"]!;
 
-        if (authUser?.Id == null)
-            return Results.Json(new { error = "Failed to create auth user." }, statusCode: 500);
+        var http = httpClientFactory.CreateClient();
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", serviceRoleKey);
+        http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
 
-        // Step 2: Insert into Users table
+        var adminPayload = new
+        {
+            email = request.Email,
+            password = request.Password,
+            email_confirm = true   // skip email verification — manager-issued accounts are immediately active
+        };
+
+        var adminResponse = await http.PostAsJsonAsync($"{supabaseUrl}/auth/v1/admin/users", adminPayload);
+
+        if (!adminResponse.IsSuccessStatusCode)
+        {
+            var errBody = await adminResponse.Content.ReadAsStringAsync();
+            return Results.Json(new { error = "Auth error: " + errBody }, statusCode: (int)adminResponse.StatusCode);
+        }
+
+        var authUser = await adminResponse.Content.ReadFromJsonAsync<SupabaseAdminUserResponse>();
+        if (string.IsNullOrWhiteSpace(authUser?.Id))
+            return Results.Json(new { error = "Auth user created but ID was missing in the response." }, statusCode: 500);
+
+        // Insert profile row into the Users table (service-role client — RLS bypassed)
         var newUser = new UserContext
         {
             Id = Guid.Parse(authUser.Id),
@@ -397,10 +423,6 @@ app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client)
         catch { /* best effort */ }
 
         return Results.Ok(new { id = authUser.Id, name = request.Name, email = request.Email, role = request.Role });
-    }
-    catch (Supabase.Gotrue.Exceptions.GotrueException ex)
-    {
-        return Results.Json(new { error = "Auth error: " + ex.Message }, statusCode: 400);
     }
     catch (Exception ex)
     {
@@ -441,17 +463,27 @@ app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, Supaba
 .WithName("UpdateStaffRole")
 .WithOpenApi();
 
-app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client) =>
+app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client, IHttpClientFactory httpClientFactory, IConfiguration config) =>
 {
     try
     {
-        // Step 1: Delete from Users table
+        // Step 1: Delete the profile row from the Users table
         await client.From<UserContext>()
             .Where(u => u.Id == id)
             .Delete();
 
-        // Step 2: Sign out any active session (Auth deletion requires service-role key via REST)
-        // The user record is removed from the users table above; Auth cleanup is handled server-side via DB cascade.
+        // Step 2: Delete the auth user via Admin API so the account cannot be used to log in.
+        // (The Supabase.Client SDK does not expose admin user deletion — must call REST directly.)
+        var supabaseUrl = config["Supabase:Url"]!;
+        var serviceRoleKey = config["Supabase:Key"]!;
+
+        var http = httpClientFactory.CreateClient();
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", serviceRoleKey);
+        http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
+
+        await http.DeleteAsync($"{supabaseUrl}/auth/v1/admin/users/{id}");
+        // Non-fatal: if the auth user was already gone, the profile is already removed above.
 
         // DEV-17: Audit log — Staff deleted
         try
@@ -482,3 +514,12 @@ public record EmailRequestDto(string Email);
 public record LoginDto(string Email, string Password);
 public record CreateStaffDto(string Email, string Password, string Name, string Role);
 public record UpdateRoleDto(string Role);
+
+// DEV-52: Minimal projection of the Supabase Admin API user-creation response
+public class SupabaseAdminUserResponse
+{
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    public string? Id { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("email")]
+    public string? Email { get; set; }
+}

@@ -36,7 +36,7 @@
     (function () {
         function tick() {
             const el = document.getElementById('header-clock');
-            if (el) el.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            if (el) el.textContent = new Date().toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Colombo' });
         }
         tick();
         setInterval(tick, 1000);
