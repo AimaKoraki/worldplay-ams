@@ -73,7 +73,7 @@
                 <p>Arcade Management System</p>
                 <div class="receipt-meta">
                     <span>Receipt #: @receipt.ReceiptNumber</span>
-                    <span>Date: @receipt.IssuedAt.ToLocalTime().ToString("MMM dd, yyyy")</span>
+                    <span>Date: @receipt.IssuedAt.ToSriLankaTime().ToString("MMM dd, yyyy")</span>
                 </div>
             </div>
 
@@ -92,14 +92,14 @@
                 <div class="receipt-timeline mt-3">
                     <div class="time-block">
                         <span class="time-lbl">Check In</span>
-                        <span class="time-val">@receipt.CheckInTime.ToLocalTime().ToString("hh:mm tt")</span>
+                        <span class="time-val">@receipt.CheckInTime.ToSriLankaTime().ToString("hh:mm tt")</span>
                     </div>
                     <div class="time-arrow">
                         <span class="bi bi-arrow-right"></span>
                     </div>
                     <div class="time-block text-end">
                         <span class="time-lbl">Check Out</span>
-                        <span class="time-val">@receipt.CheckOutTime.ToLocalTime().ToString("hh:mm tt")</span>
+                        <span class="time-val">@receipt.CheckOutTime.ToSriLankaTime().ToString("hh:mm tt")</span>
                     </div>
                 </div>
 
@@ -278,23 +278,85 @@
 
     /* Print styles */
     @@media print {
-        body { background: #fff !important; }
-        .empty-layout { padding: 0 !important; background: #fff !important; }
-        .no-print { display: none !important; }
-        .receipt-tape {
-            box-shadow: none !important;
+        html, body {
+            background: #fff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        body * {
+            visibility: hidden !important;
+        }
+
+        .receipt-container,
+        .receipt-container * {
+            visibility: hidden !important;
+        }
+
+        .receipt-tape,
+        .receipt-tape * {
+            visibility: visible !important;
+        }
+
+        .empty-layout {
             padding: 0 !important;
+            background: #fff !important;
+            align-items: flex-start !important;
+        }
+
+        .no-print,
+        .receipt-actions,
+        .email-form {
+            display: none !important;
+        }
+
+        .receipt-tape {
+            position: fixed !important;
+            inset: 0 !important;
+            box-shadow: none !important;
+            padding: 1.25rem 1.5rem !important;
+            margin: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
+            color: #000 !important;
+            background: #fff !important;
+            border: none !important;
+            page-break-inside: avoid;
+            -webkit-text-fill-color: #000 !important;
         }
+
+        .receipt-tape * {
+            color: #000 !important;
+            -webkit-text-fill-color: #000 !important;
+            background-color: transparent !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+        }
+
         .receipt-tape::before, .receipt-tape::after { display: none !important; }
-        .email-form {
-            border: 1px solid rgba(0,240,255,0.3);
-            box-shadow: 0 4px 15px rgba(0,240,255,0.1);
+        .receipt-header,
+        .receipt-body,
+        .receipt-footer,
+        .receipt-barcode,
+        .receipt-thankyou {
+            break-inside: avoid;
         }
-        
-        .alert-success { background: rgba(0,230,118,0.1); color: var(--status-active); border: 1px solid rgba(0,230,118,0.3); }
-        .alert-danger { background: rgba(255,51,102,0.1); color: var(--status-error); border: 1px solid rgba(255,51,102,0.3); }
+
+        .receipt-header h2,
+        .receipt-header p,
+        .receipt-meta,
+        .r-label,
+        .r-value,
+        .time-lbl,
+        .time-val,
+        .total-lbl,
+        .total-val,
+        .receipt-staff,
+        .barcode-text,
+        .receipt-thankyou {
+            color: #000 !important;
+            -webkit-text-fill-color: #000 !important;
+        }
 
         @@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
     }
