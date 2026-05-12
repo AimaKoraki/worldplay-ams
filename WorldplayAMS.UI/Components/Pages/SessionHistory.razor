@@ -127,10 +127,10 @@
                                     @(s.MachineName ?? "—")
                                 </td>
                                 <td style="font-size:0.82rem; color:var(--text-secondary);">
-                                    @s.StartTime.ToLocalTime().ToString("MMM dd, HH:mm:ss")
+                                    @s.StartTime.ToSriLankaTime().ToString("MMM dd, HH:mm:ss")
                                 </td>
                                 <td style="font-size:0.82rem; color:var(--text-secondary);">
-                                    @(s.EndTime.HasValue ? s.EndTime.Value.ToLocalTime().ToString("MMM dd, HH:mm:ss") : "— In Progress —")
+                                    @(s.EndTime.HasValue ? s.EndTime.Value.ToSriLankaTime().ToString("MMM dd, HH:mm:ss") : "— In Progress —")
                                 </td>
                                 <td>
                                     @if (s.TotalDurationMinutes.HasValue)
