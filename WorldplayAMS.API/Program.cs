@@ -33,6 +33,7 @@ builder.Services.AddScoped<TransactionHistoryService>();
 builder.Services.AddScoped<DigitalReceiptService>();
 builder.Services.AddScoped<IRfidReaderService, RfidReaderService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<AnalyticsService>();
 
 var app = builder.Build();
 
@@ -501,6 +502,28 @@ app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client, IHttpCl
     }
 })
 .WithName("DeleteStaff")
+.WithOpenApi();
+
+// DEV-9: Analytics Endpoints
+
+app.MapGet("/api/analytics/peak-hours", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date;
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await analyticsService.GetPeakHoursAsync(fromDate, toDate);
+    return Results.Ok(result);
+})
+.WithName("GetPeakHours")
+.WithOpenApi();
+
+app.MapGet("/api/analytics/machine-usage", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date;
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await analyticsService.GetMachineUsageAnalyticsAsync(fromDate, toDate);
+    return Results.Ok(result);
+})
+.WithName("GetMachineUsage")
 .WithOpenApi();
 
 app.Run();
