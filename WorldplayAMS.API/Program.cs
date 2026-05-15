@@ -526,6 +526,17 @@ app.MapGet("/api/analytics/machine-usage", async (DateTime? from, DateTime? to, 
 .WithName("GetMachineUsage")
 .WithOpenApi();
 
+// DEV-24: Staffing Recommendations
+app.MapGet("/api/analytics/staffing-recommendations", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date.AddDays(-30); // Default to last 30 days for historical trends
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await analyticsService.GetStaffingRecommendationsAsync(fromDate, toDate);
+    return Results.Ok(result);
+})
+.WithName("GetStaffingRecommendations")
+.WithOpenApi();
+
 app.Run();
 
 // DTOs
