@@ -92,6 +92,48 @@ public class AnalyticsService
         }
     }
 
+    public async Task<object> GetStaffingRecommendationsAsync(DateTime from, DateTime to)
+    {
+        try
+        {
+            var sessions = await _repository.GetSessionsByDateRangeAsync(from, to);
+
+            // Group by Day of Week and Hour
+            var hourlyData = sessions
+                .GroupBy(s => new { s.StartTime.ToLocalTime().DayOfWeek, s.StartTime.ToLocalTime().Hour })
+                .Select(g => new
+                {
+                    DayOfWeek = g.Key.DayOfWeek.ToString(),
+                    Hour = g.Key.Hour,
+                    DisplayHour = FormatHour(g.Key.Hour),
+                    AverageSessions = g.Count(), // Simplifying: assuming date range is a typical period or we just take total for that specific day/hour. To be more accurate over weeks, we'd divide by number of those weekdays in range. For now, treating the range as the baseline dataset.
+                    RecommendedStaff = CalculateRecommendedStaff(g.Count())
+                })
+                .OrderBy(x => x.DayOfWeek)
+                .ThenBy(x => x.Hour)
+                .ToList();
+
+            return new
+            {
+                DateRange = new { From = from, To = to },
+                Recommendations = hourlyData
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to calculate staffing recommendations.");
+            return new { Error = "Failed to calculate staffing recommendations." };
+        }
+    }
+
+    private int CalculateRecommendedStaff(int sessionCount)
+    {
+        int baseStaff = 2;
+        int sessionsPerStaff = 10;
+        int additionalStaff = (int)Math.Ceiling((double)sessionCount / sessionsPerStaff);
+        return Math.Max(baseStaff, additionalStaff); // If sessions dictate more than base, use that, otherwise base. Wait, actually if 1 session -> 1 staff + 2 base? No, it should be: base + additional. Or total = max(base, additional). Let's do max(baseStaff, additionalStaff). 
+    }
+
     private string FormatHour(int hour)
     {
         var amPm = hour >= 12 ? "PM" : "AM";

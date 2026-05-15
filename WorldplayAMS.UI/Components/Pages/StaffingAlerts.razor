@@ -1,0 +1,305 @@
+@page "/staffing-alerts"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject IHttpClientFactory ClientFactory
+@inject IWebHostEnvironment Env
+
+<PageTitle>Worldplay AMS — Staffing Alerts</PageTitle>
+
+<div class="dashboard-wrap">
+
+    <!-- Page Header -->
+    <div class="dash-header">
+        <div>
+            <h1 class="dash-title">
+                <span class="bi bi-people-fill me-3 dash-title-icon" style="color: var(--neon-purple);"></span>Staffing Recommendations
+            </h1>
+            <p class="dash-subtitle">Predictive staffing alerts based on historical arcade usage trends</p>
+        </div>
+        <div class="dash-header-actions">
+            <button class="btn-neon btn-neon-purple" @onclick="LoadRecommendations">
+                <span class="bi bi-arrow-repeat"></span> Refresh Data
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-grid" style="grid-template-columns: 1fr;">
+
+        <section class="panel-card">
+            <div class="panel-accent accent-purple"></div>
+            <div class="panel-inner">
+                <p class="section-title"><span class="bi bi-calendar-week text-purple"></span> Weekly Staffing Forecast</p>
+
+                @if (isLoading)
+                {
+                    <div class="empty-state">
+                        <span class="bi bi-hourglass-split rotating" style="font-size:2rem; color:var(--neon-purple);"></span>
+                        <p class="mt-3">Analyzing historical data...</p>
+                    </div>
+                }
+                else if (errorMessage != null)
+                {
+                    <div class="alert alert-danger" style="background: rgba(255,50,50,0.1); border: 1px solid rgba(255,50,50,0.3); color: #ff8888; border-radius: 8px; padding: 1rem;">
+                        <span class="bi bi-exclamation-triangle-fill me-2"></span> @errorMessage
+                    </div>
+                }
+                else if (recommendations == null || !recommendations.Any())
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon-ring">
+                            <span class="bi bi-bar-chart-line" style="font-size:2rem; color:var(--text-disabled);"></span>
+                        </div>
+                        <h3 class="empty-heading mt-4">No Historical Data</h3>
+                        <p class="empty-desc mt-1">Not enough session history to generate recommendations.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table-glass">
+                            <thead>
+                                <tr>
+                                    <th>Day of Week</th>
+                                    <th>Time</th>
+                                    <th>Avg. Active Sessions</th>
+                                    <th>Recommended Staff</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var rec in recommendations)
+                                {
+                                    <tr>
+                                        <td class="fw-bold" style="color:var(--text-primary);">
+                                            @rec.DayOfWeek
+                                        </td>
+                                        <td style="color:var(--text-secondary);">
+                                            <span class="bi bi-clock me-1"></span> @rec.DisplayHour
+                                        </td>
+                                        <td class="font-mono" style="color:var(--neon-cyan);">
+                                            @rec.AverageSessions
+                                        </td>
+                                        <td>
+                                            <span class="badge-neon @(rec.RecommendedStaff > 2 ? "active" : "idle")">
+                                                <span class="bi bi-person-badge"></span> @rec.RecommendedStaff Staff
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (rec.RecommendedStaff > 2)
+                                            {
+                                                <span style="color: var(--neon-amber); font-size: 0.85rem;">
+                                                    <span class="bi bi-exclamation-circle-fill"></span> High Traffic Expected
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span style="color: var(--text-disabled); font-size: 0.85rem;">
+                                                    Normal Operations
+                                                </span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+<style>
+    /* ── DASHBOARD WRAPPER ─────────────────────────────────────── */
+    .dashboard-wrap { padding-bottom: 2rem; }
+
+    /* ── HEADER ─────────────────────────────────────────────────── */
+    .dash-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+    }
+
+    .dash-title {
+        font-size: 2rem;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        color: var(--text-primary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+
+    .dash-title-icon {
+        filter: drop-shadow(0 0 8px rgba(157,0,255,0.5));
+    }
+
+    .dash-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-top: 0.35rem;
+    }
+
+    /* ── PANEL CARDS ────────────────────────────────────────────── */
+    .panel-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        box-shadow: var(--shadow-card);
+        position: relative;
+    }
+
+    .panel-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    }
+
+    .panel-accent {
+        height: 3px;
+        width: 100%;
+    }
+    .accent-purple { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+
+    .panel-inner {
+        padding: 1.75rem;
+    }
+
+    .section-title {
+        font-family: var(--font-heading);
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .text-purple { color: var(--neon-purple); }
+
+    /* ── EMPTY STATE ────────────────────────────────────────────── */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 260px;
+        color: var(--text-secondary);
+        text-align: center;
+        padding: 1rem;
+    }
+
+    .empty-icon-ring {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--surface-border-strong);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .empty-heading {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .empty-desc {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        max-width: 300px;
+    }
+
+    /* ── TABLE ──────────────────────────────────────────────────── */
+    .table-responsive {
+        overflow-x: auto;
+        margin: 0 -0.5rem;
+        padding: 0 0.5rem;
+    }
+
+    .badge-neon {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.3rem 0.65rem;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        border: 1px solid transparent;
+    }
+
+    .badge-neon.active {
+        background: rgba(0, 240, 255, 0.1);
+        color: var(--neon-cyan);
+        border-color: rgba(0, 240, 255, 0.3);
+        box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
+    }
+
+    .badge-neon.idle {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-secondary);
+        border-color: var(--surface-border-strong);
+    }
+</style>
+
+@code {
+    private HttpClient httpClient = default!;
+    private bool isLoading = true;
+    private string? errorMessage = null;
+    private List<StaffingRecommendation> recommendations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        httpClient = ClientFactory.CreateClient("ApiClient");
+        await LoadRecommendations();
+    }
+
+    private async Task LoadRecommendations()
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await httpClient.GetFromJsonAsync<StaffingRecommendationResponse>("/api/analytics/staffing-recommendations");
+            if (response != null && response.Recommendations != null)
+            {
+                recommendations = response.Recommendations;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Unable to connect to the analytics service. Ensure the backend API is running.";
+            Console.WriteLine(ex);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private class StaffingRecommendationResponse
+    {
+        public List<StaffingRecommendation> Recommendations { get; set; } = new();
+    }
+
+    private class StaffingRecommendation
+    {
+        public string DayOfWeek { get; set; } = string.Empty;
+        public int Hour { get; set; }
+        public string DisplayHour { get; set; } = string.Empty;
+        public int AverageSessions { get; set; }
+        public int RecommendedStaff { get; set; }
+    }
+}
