@@ -121,6 +121,7 @@ public class SupabaseAuthStateProvider : AuthenticationStateProvider
         public string Email { get; set; } = string.Empty;
         public string Role { get; set; } = "Staff";
         public bool Authenticated { get; set; }
+        public string Token { get; set; } = string.Empty;
     }
 
     private class ErrorResponse

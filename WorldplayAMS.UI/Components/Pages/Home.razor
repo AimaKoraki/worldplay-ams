@@ -196,6 +196,55 @@
             </div>
         </section>
 
+        <!-- Revenue Insights Widget -->
+        <section class="panel-card" style="grid-column: 1 / -1;">
+            <div class="panel-accent accent-green"></div>
+            <div class="panel-inner">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <p class="section-title m-0"><span class="bi bi-graph-up-arrow text-success"></span> Revenue Insights (RevPAMH)</p>
+                    <a href="/attraction-analytics" class="btn btn-sm btn-outline-light" style="border-radius: 20px; font-size: 0.8rem; border-color: rgba(255,255,255,0.2);">
+                        Full Report <span class="bi bi-arrow-right"></span>
+                    </a>
+                </div>
+
+                @if (revPamhData == null)
+                {
+                    <div class="empty-state" style="min-height: 100px;">
+                        <span class="bi bi-arrow-repeat rotating" style="font-size:1.5rem; color:var(--status-active);"></span>
+                        <p class="mt-2 text-secondary">Loading insights...</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="row align-items-center">
+                        <div class="col-md-4 mb-3 mb-md-0">
+                            <div class="p-3" style="background: rgba(0,230,118,0.05); border: 1px solid rgba(0,230,118,0.2); border-radius: 12px;">
+                                <span class="d-block text-success mb-1" style="font-size:0.75rem; font-weight:700; letter-spacing:1px; text-transform:uppercase;">System-Wide RevPAMH</span>
+                                <span class="fw-bold" style="font-size:2.2rem; color:var(--status-active); line-height:1;">LKR @revPamhData.SystemRevPAMH.ToString("0.00")</span>
+                                <span class="d-block text-secondary mt-2" style="font-size:0.8rem;">Average hourly revenue generated per available arcade terminal over the last 30 days.</span>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <span class="d-block text-secondary mb-2" style="font-size:0.8rem; font-weight:600; text-transform:uppercase;">Top Performing Terminals</span>
+                            <div class="d-flex gap-3 overflow-auto pb-2" style="scrollbar-width: thin;">
+                                @foreach(var machine in revPamhData.MachineRevPAMH.Take(4))
+                                {
+                                    <div class="p-3 d-flex flex-column justify-content-center" style="background: rgba(255,255,255,0.02); border: 1px solid var(--surface-border-strong); border-radius: 10px; min-width: 180px; transition: transform 0.2s;">
+                                        <div class="fw-bold text-light text-truncate mb-2" style="font-size:0.9rem;" title="@machine.MachineName">
+                                            <span class="bi bi-cpu me-2" style="color:var(--neon-cyan);"></span>@machine.MachineName
+                                        </div>
+                                        <div style="color: var(--text-primary); font-family: var(--font-heading); font-size: 1.3rem; font-weight:700;">
+                                            LKR @machine.RevPAMH.ToString("0") <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:normal;">/ hr</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+
     </div>
 </div>
 
@@ -360,6 +409,7 @@
     }
     .accent-cyan   { background: linear-gradient(90deg, var(--neon-cyan), transparent); }
     .accent-purple { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+    .accent-green  { background: linear-gradient(90deg, var(--status-active), transparent); }
 
     .panel-inner {
         padding: 1.75rem;
@@ -488,17 +538,18 @@
     private int machineCount = 0;
     private decimal todayRevenue = 0;
     private bool isDevelopment = false;
+    private RevPAMHDto? revPamhData;
 
     protected override async Task OnInitializedAsync()
     {
         isDevelopment = Env.IsDevelopment();
         httpClient = ClientFactory.CreateClient("ApiClient");
-        await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue());
+        await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue(), LoadRevPAMH());
     }
 
     private async Task RefreshAll()
     {
-        await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue());
+        await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue(), LoadRevPAMH());
     }
 
     private async Task LoadSessions()
@@ -539,6 +590,18 @@
         }
     }
 
+    private async Task LoadRevPAMH()
+    {
+        try
+        {
+            revPamhData = await httpClient.GetFromJsonAsync<RevPAMHDto>("/api/analytics/revpamh");
+        }
+        catch
+        {
+            revPamhData = null;
+        }
+    }
+
     private async Task SimulateRfidTap()
     {
         try
@@ -560,5 +623,18 @@
         public string Status { get; set; } = string.Empty;
         public int? TotalDurationMinutes { get; set; }
         public decimal? Fee { get; set; }
+    }
+
+    private class RevPAMHDto
+    {
+        public decimal SystemRevPAMH { get; set; }
+        public List<MachineRevPAMHDto> MachineRevPAMH { get; set; } = new();
+    }
+
+    private class MachineRevPAMHDto
+    {
+        public Guid MachineId { get; set; }
+        public string MachineName { get; set; } = string.Empty;
+        public decimal RevPAMH { get; set; }
     }
 }
