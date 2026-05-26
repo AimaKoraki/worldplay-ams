@@ -92,6 +92,77 @@ public class AnalyticsService
         }
     }
 
+    public async Task<object> GetStaffingRecommendationsAsync(DateTime from, DateTime to)
+    {
+        try
+        {
+            var sessions = await _repository.GetSessionsByDateRangeAsync(from, to);
+
+            // Calculate how many weeks are in the date range to get a true average
+            var totalDays = (to - from).TotalDays;
+            var weeksInRange = Math.Max(1, totalDays / 7.0);
+
+            // Group by Day of Week and Hour
+            var hourlyData = sessions
+                .GroupBy(s => new { s.StartTime.ToLocalTime().DayOfWeek, s.StartTime.ToLocalTime().Hour })
+                .Select(g => 
+                {
+                    var totalSessions = g.Count();
+                    var avgSessions = (int)Math.Round(totalSessions / weeksInRange);
+                    // Ensure it doesn't drop to 0 if there's at least some traffic
+                    if (totalSessions > 0 && avgSessions == 0) avgSessions = 1;
+
+                    return new
+                    {
+                        DayOfWeek = g.Key.DayOfWeek.ToString(),
+                        Hour = g.Key.Hour,
+                        DisplayHour = FormatHour(g.Key.Hour),
+                        AverageSessions = avgSessions,
+                        RecommendedStaff = CalculateRecommendedStaff(avgSessions)
+                    };
+                })
+                .OrderBy(x => DayOfWeekToNumber(x.DayOfWeek))
+                .ThenBy(x => x.Hour)
+                .ToList();
+
+            return new
+            {
+                DateRange = new { From = from, To = to },
+                Recommendations = hourlyData
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to calculate staffing recommendations.");
+            return new { Error = "Failed to calculate staffing recommendations." };
+        }
+    }
+
+    private int DayOfWeekToNumber(string day)
+    {
+        return day switch
+        {
+            "Monday" => 1,
+            "Tuesday" => 2,
+            "Wednesday" => 3,
+            "Thursday" => 4,
+            "Friday" => 5,
+            "Saturday" => 6,
+            "Sunday" => 7,
+            _ => 8
+        };
+    }
+
+    private int CalculateRecommendedStaff(int averageSessions)
+    {
+        // Base staffing is 2. We add 1 staff member for every 5 active sessions.
+        int baseStaff = 2;
+        int sessionsPerStaff = 5;
+        
+        int additionalStaff = averageSessions / sessionsPerStaff;
+        return baseStaff + additionalStaff; 
+    }
+
     private string FormatHour(int hour)
     {
         var amPm = hour >= 12 ? "PM" : "AM";
