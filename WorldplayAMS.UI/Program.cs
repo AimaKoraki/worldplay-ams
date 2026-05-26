@@ -6,11 +6,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddScoped<WorldplayAMS.UI.Services.TokenDelegatingHandler>();
+
 // Add HttpClient for communicating with WorldplayAMS.API
 builder.Services.AddHttpClient("ApiClient", client =>
 {
     client.BaseAddress = new Uri("http://localhost:5089");
-});
+}).AddHttpMessageHandler<WorldplayAMS.UI.Services.TokenDelegatingHandler>();
 
 builder.Services.AddScoped<WorldplayAMS.UI.Services.IReceiptViewerService, WorldplayAMS.UI.Services.ReceiptViewerService>();
 

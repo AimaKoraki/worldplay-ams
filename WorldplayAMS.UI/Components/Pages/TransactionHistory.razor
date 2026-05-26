@@ -3,6 +3,7 @@
 @inject IHttpClientFactory ClientFactory
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Worldplay AMS — Transaction History</PageTitle>
 
@@ -536,9 +537,13 @@
     private bool sortAscending = false;
     private bool isLoading = true;
     private bool showAuditPanel = false;
+    private string managerName = "Admin";
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        managerName = authState.User.Identity?.Name ?? "Admin";
+        
         await RefreshAll();
     }
 
@@ -612,7 +617,7 @@
         var client = ClientFactory.CreateClient("ApiClient");
         try
         {
-            await client.PostAsJsonAsync("/api/audit/log", new { ManagerName = "Admin", Action = action, Details = details });
+            await client.PostAsJsonAsync("/api/audit/log", new { ManagerName = managerName, Action = action, Details = details });
         }
         catch { /* silently fail — non-critical */ }
     }

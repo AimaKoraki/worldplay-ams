@@ -49,7 +49,7 @@ public class MachineMonitoringService
                 await _repository.InsertAuditLogAsync(new ManagerAuditLog
                 {
                     Id = Guid.NewGuid(),
-                    ManagerId = staffId ?? Guid.Empty,
+                    ManagerId = staffId,
                     ManagerName = technicianName,
                     Action = "StartMachineSession",
                     Details = $"Started session on machine: {machineName} ({machineId})"
@@ -79,7 +79,7 @@ public class MachineMonitoringService
                 await _repository.InsertAuditLogAsync(new ManagerAuditLog
                 {
                     Id = Guid.NewGuid(),
-                    ManagerId = staffId ?? Guid.Empty,
+                    ManagerId = staffId,
                     ManagerName = technicianName,
                     Action = "StopMachineSession",
                     Details = $"Stopped session on machine: {machineName} ({machineId}). Duration: {log.DurationMinutes} min."
