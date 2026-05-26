@@ -1,0 +1,455 @@
+@page "/attraction-analytics"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject IHttpClientFactory ClientFactory
+
+<PageTitle>Worldplay AMS — Revenue by Attraction</PageTitle>
+
+<div class="dashboard-wrap">
+    <!-- Page Header -->
+    <div class="dash-header">
+        <div>
+            <h1 class="dash-title">
+                <span class="bi bi-bar-chart-fill me-3 dash-title-icon text-purple"></span>Revenue by Attraction
+            </h1>
+            <p class="dash-subtitle">Analyze machine performance, revenue, and usage to optimize pricing</p>
+        </div>
+        <div class="dash-header-actions">
+            <div class="date-picker-group">
+                <input type="date" class="glass-input" @bind="fromDate" />
+                <span class="text-secondary mx-2">to</span>
+                <input type="date" class="glass-input" @bind="toDate" />
+                <button class="btn-neon btn-neon-purple ms-3" @onclick="LoadData">
+                    <span class="bi bi-filter"></span> Apply Filter
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="empty-state">
+            <span class="bi bi-arrow-repeat rotating text-purple" style="font-size:2.5rem;"></span>
+            <p class="mt-3">Analyzing attraction data...</p>
+        </div>
+    }
+    else if (errorMessage != null)
+    {
+        <div class="alert alert-danger glass-alert">
+            <span class="bi bi-exclamation-triangle-fill me-2"></span> @errorMessage
+        </div>
+    }
+    else if (analyticsData == null || !analyticsData.MachineUsage.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon-ring">
+                <span class="bi bi-inbox text-secondary" style="font-size:2.5rem;"></span>
+            </div>
+            <h3 class="empty-heading mt-4">No Data Available</h3>
+            <p class="empty-desc mt-1">No sessions were found for the selected date range.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Summary Cards -->
+        <div class="kpi-grid">
+            <div class="kpi-card kpi-purple">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-purple">
+                        <span class="bi bi-cash-coin"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">LKR @TotalRevenue.ToString("N2")</span>
+                        <span class="kpi-label">Total Revenue</span>
+                    </div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-cyan">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-cyan">
+                        <span class="bi bi-joystick"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">@TotalSessions</span>
+                        <span class="kpi-label">Total Plays</span>
+                    </div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-amber">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-amber">
+                        <span class="bi bi-clock-history"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">@TotalDurationMin<span style="font-size: 1rem; color: var(--text-secondary);">m</span></span>
+                        <span class="kpi-label">Total Play Time</span>
+                    </div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-green">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-green">
+                        <span class="bi bi-graph-up-arrow"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">@TopMachine</span>
+                        <span class="kpi-label">Top Attraction</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <section class="panel-card mt-4">
+            <div class="panel-accent accent-purple"></div>
+            <div class="panel-inner">
+                <p class="section-title mb-4"><span class="bi bi-table text-purple"></span> Attraction Performance Metrics</p>
+                <div class="table-responsive">
+                    <table class="table-glass">
+                        <thead>
+                            <tr>
+                                <th>Attraction Name</th>
+                                <th class="text-end">Total Plays</th>
+                                <th class="text-end">Avg Duration</th>
+                                <th class="text-end">Total Duration</th>
+                                <th class="text-end">Total Revenue</th>
+                                <th class="text-center">Performance Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var machine in analyticsData.MachineUsage)
+                            {
+                                var revenueShare = TotalRevenue > 0 ? (machine.TotalRevenue / TotalRevenue) * 100 : 0;
+                                
+                                <tr class="table-row-hover">
+                                    <td class="fw-bold text-light">
+                                        <div class="d-flex align-items-center">
+                                            <div class="machine-avatar me-3">
+                                                <span class="bi bi-cpu"></span>
+                                            </div>
+                                            @machine.MachineName
+                                        </div>
+                                    </td>
+                                    <td class="text-end font-mono">@machine.TotalSessions</td>
+                                    <td class="text-end font-mono text-secondary">@machine.AverageDurationMinutes.ToString("0.0")m</td>
+                                    <td class="text-end font-mono text-secondary">@machine.TotalDurationMinutes<span style="font-size: 0.8em">m</span></td>
+                                    <td class="text-end font-mono fw-bold" style="color: var(--status-active);">LKR @machine.TotalRevenue.ToString("N2")</td>
+                                    <td class="text-center">
+                                        @if (revenueShare >= 20)
+                                        {
+                                            <span class="badge-neon active"><span class="bi bi-star-fill"></span> Top Earner</span>
+                                        }
+                                        else if (revenueShare < 5 && machine.TotalSessions > 0)
+                                        {
+                                            <span class="badge-neon idle"><span class="bi bi-arrow-down-circle"></span> Underperforming</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge-neon" style="color: var(--neon-cyan); border-color: rgba(0,240,255,0.3); background: rgba(0,240,255,0.05);">Standard</span>
+                                        }
+                                        <div class="progress mt-2" style="height: 4px; background: rgba(255,255,255,0.1);">
+                                            <div class="progress-bar bg-purple" role="progressbar" style="width: @revenueShare%" aria-valuenow="@revenueShare" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    }
+</div>
+
+<style>
+    .dashboard-wrap { padding-bottom: 2rem; }
+    
+    .dash-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+    }
+    .dash-title {
+        font-size: 2rem;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        color: var(--text-primary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+    .dash-title-icon {
+        color: var(--neon-purple);
+        font-size: 1.6rem;
+        filter: drop-shadow(0 0 8px rgba(157,0,255,0.5));
+    }
+    .dash-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-top: 0.35rem;
+    }
+    
+    .date-picker-group {
+        display: flex;
+        align-items: center;
+        background: var(--surface-raised);
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--surface-border);
+    }
+    
+    .glass-input {
+        background: rgba(0,0,0,0.2);
+        border: 1px solid var(--surface-border-strong);
+        color: var(--text-primary);
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        outline: none;
+        transition: border-color 0.3s;
+        color-scheme: dark;
+    }
+    .glass-input:focus {
+        border-color: var(--neon-purple);
+    }
+    
+    /* KPI Grid reused from Home.razor structure but adapted */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.25rem;
+        margin-bottom: 2rem;
+    }
+    @@media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @@media (max-width: 600px) { .kpi-grid { grid-template-columns: 1fr; } }
+    
+    .kpi-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        position: relative;
+        transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+    }
+    .kpi-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .kpi-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--surface-border-strong);
+    }
+    
+    .kpi-accent { height: 3px; width: 100%; }
+    .kpi-green .kpi-accent  { background: linear-gradient(90deg, var(--status-active), transparent); }
+    .kpi-cyan .kpi-accent   { background: linear-gradient(90deg, var(--neon-cyan), transparent); }
+    .kpi-amber .kpi-accent  { background: linear-gradient(90deg, var(--neon-amber), transparent); }
+    .kpi-purple .kpi-accent { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+    
+    .kpi-green:hover  { box-shadow: var(--shadow-card), 0 0 20px rgba(0,230,118,0.12); }
+    .kpi-cyan:hover   { box-shadow: var(--shadow-card), 0 0 20px rgba(0,240,255,0.12); }
+    .kpi-amber:hover  { box-shadow: var(--shadow-card), 0 0 20px rgba(255,184,0,0.12); }
+    .kpi-purple:hover { box-shadow: var(--shadow-card), 0 0 20px rgba(157,0,255,0.12); }
+    
+    .kpi-body {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 1.5rem 1.75rem;
+    }
+    
+    .kpi-icon-wrap {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        flex-shrink: 0;
+    }
+    .kpi-icon-green  { background: rgba(0,230,118,0.12); color: var(--status-active); }
+    .kpi-icon-cyan   { background: rgba(0,240,255,0.1);  color: var(--neon-cyan); }
+    .kpi-icon-amber  { background: rgba(255,184,0,0.1);  color: var(--neon-amber); }
+    .kpi-icon-purple { background: rgba(157,0,255,0.1);  color: var(--neon-purple); }
+    
+    .kpi-data { display: flex; flex-direction: column; }
+    .kpi-value {
+        font-family: var(--font-heading);
+        font-size: 1.85rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+    }
+    .kpi-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-top: 5px;
+    }
+
+    /* Panel Card */
+    .panel-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        box-shadow: var(--shadow-card);
+        position: relative;
+    }
+    .panel-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    }
+    .panel-accent { height: 3px; width: 100%; }
+    .accent-purple { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+    .panel-inner { padding: 1.75rem; }
+    
+    /* Table Enhancements */
+    .table-glass th {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--surface-border-strong);
+        padding-bottom: 1rem;
+    }
+    .table-glass td {
+        padding: 1rem 0.5rem;
+        vertical-align: middle;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .table-row-hover:hover td {
+        background: rgba(255,255,255,0.02);
+    }
+    
+    .machine-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: rgba(157,0,255,0.15);
+        color: var(--neon-purple);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        border: 1px solid rgba(157,0,255,0.3);
+    }
+    
+    .bg-purple { background-color: var(--neon-purple) !important; box-shadow: 0 0 8px var(--neon-purple); }
+    
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 260px;
+        color: var(--text-secondary);
+        text-align: center;
+        padding: 1rem;
+    }
+    .empty-icon-ring {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--surface-border-strong);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .empty-heading { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+    .empty-desc { font-size: 0.85rem; color: var(--text-secondary); max-width: 300px; }
+    .rotating { animation: spin 2s linear infinite; }
+    @@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+@code {
+    private DateTime fromDate = DateTime.Today.AddDays(-30);
+    private DateTime toDate = DateTime.Today;
+    private bool isLoading = true;
+    private string? errorMessage;
+    private AnalyticsResponse? analyticsData;
+    private HttpClient httpClient = default!;
+
+    // Derived metrics
+    private decimal TotalRevenue => analyticsData?.MachineUsage.Sum(m => m.TotalRevenue) ?? 0;
+    private int TotalSessions => analyticsData?.MachineUsage.Sum(m => m.TotalSessions) ?? 0;
+    private int TotalDurationMin => analyticsData?.MachineUsage.Sum(m => m.TotalDurationMinutes) ?? 0;
+    private string TopMachine => analyticsData?.MachineUsage.OrderByDescending(m => m.TotalRevenue).FirstOrDefault()?.MachineName ?? "N/A";
+
+    protected override async Task OnInitializedAsync()
+    {
+        httpClient = ClientFactory.CreateClient("ApiClient");
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var url = $"/api/analytics/machine-usage?from={fromDate:yyyy-MM-dd}&to={toDate:yyyy-MM-dd}";
+            var response = await httpClient.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                analyticsData = await response.Content.ReadFromJsonAsync<AnalyticsResponse>();
+            }
+            else
+            {
+                errorMessage = "Failed to load analytics data.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error connecting to server: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public class AnalyticsResponse
+    {
+        public DateRangeDto DateRange { get; set; } = new();
+        public List<MachineUsageDto> MachineUsage { get; set; } = new();
+    }
+
+    public class DateRangeDto
+    {
+        public DateTime From { get; set; }
+        public DateTime To { get; set; }
+    }
+
+    public class MachineUsageDto
+    {
+        public Guid MachineId { get; set; }
+        public string MachineName { get; set; } = string.Empty;
+        public int TotalSessions { get; set; }
+        public int TotalDurationMinutes { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public double AverageDurationMinutes { get; set; }
+    }
+}

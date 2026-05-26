@@ -537,6 +537,17 @@ app.MapGet("/api/analytics/staffing-recommendations", async (DateTime? from, Dat
 .WithName("GetStaffingRecommendations")
 .WithOpenApi();
 
+// DEV-15a: RevPAMH Calculation
+app.MapGet("/api/analytics/revpamh", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date.AddDays(-30);
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await analyticsService.GetRevPAMHAsync(fromDate, toDate);
+    return Results.Ok(result);
+})
+.WithName("GetRevPAMH")
+.WithOpenApi();
+
 app.Run();
 
 // DTOs
