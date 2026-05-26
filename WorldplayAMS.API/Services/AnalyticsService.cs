@@ -138,6 +138,58 @@ public class AnalyticsService
         }
     }
 
+    public async Task<object> GetRevPAMHAsync(DateTime from, DateTime to)
+    {
+        try
+        {
+            var sessions = await _repository.GetSessionsByDateRangeAsync(from, to);
+            var machines = await _machineService.GetAllMachinesAsync();
+            var activeMachines = machines.Where(m => m.Status == "Online").ToList();
+            
+            var totalHours = (to - from).TotalHours;
+            if (totalHours <= 0) totalHours = 24; // Default to 24 hours if same day or invalid
+
+            var totalRevenue = sessions.Sum(s => s.Fee ?? 0);
+            var activeMachineCount = activeMachines.Count;
+            
+            var totalAvailableMachineHours = activeMachineCount * totalHours;
+            var systemRevPAMH = totalAvailableMachineHours > 0 
+                ? totalRevenue / (decimal)totalAvailableMachineHours 
+                : 0;
+
+            // Calculate per machine RevPAMH
+            var machineMap = machines.ToDictionary(m => m.Id, m => m.Name);
+            var machineUsage = sessions
+                .Where(s => s.MachineId.HasValue)
+                .GroupBy(s => s.MachineId!.Value)
+                .Select(g => new
+                {
+                    MachineId = g.Key,
+                    MachineName = machineMap.TryGetValue(g.Key, out var name) ? name : "Unknown Machine",
+                    TotalRevenue = g.Sum(s => s.Fee ?? 0),
+                    RevPAMH = g.Sum(s => s.Fee ?? 0) / (decimal)totalHours
+                })
+                .OrderByDescending(x => x.RevPAMH)
+                .ToList();
+
+            return new
+            {
+                DateRange = new { From = from, To = to },
+                TotalHours = totalHours,
+                ActiveMachineCount = activeMachineCount,
+                TotalAvailableMachineHours = totalAvailableMachineHours,
+                TotalRevenue = totalRevenue,
+                SystemRevPAMH = systemRevPAMH,
+                MachineRevPAMH = machineUsage
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to calculate RevPAMH.");
+            return new { Error = "Failed to calculate RevPAMH data." };
+        }
+    }
+
     private int DayOfWeekToNumber(string day)
     {
         return day switch

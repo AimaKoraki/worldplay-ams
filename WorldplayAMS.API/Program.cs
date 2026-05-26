@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Supabase;
 using WorldplayAMS.API.Services;
 using WorldplayAMS.Core.Interfaces;
@@ -34,6 +36,17 @@ builder.Services.AddScoped<DigitalReceiptService>();
 builder.Services.AddScoped<IRfidReaderService, RfidReaderService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<AnalyticsService>();
+builder.Services.AddScoped<StaffService>();
+
+builder.Services.AddAuthentication("Supabase")
+    .AddScheme<AuthenticationSchemeOptions, SupabaseAuthHandler>("Supabase", null);
+
+builder.Services.AddAuthorization(options => 
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("AdminOrTech", policy => policy.RequireRole("Admin", "Technician"));
+    options.AddPolicy("AdminOrStaff", policy => policy.RequireRole("Admin", "Staff"));
+});
 
 var app = builder.Build();
 
@@ -53,6 +66,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 // Minimal API Endpoints
 
 app.MapPost("/api/sessions/start", async (StartSessionDto request, IGameSessionService sessionService) =>
@@ -62,6 +78,7 @@ app.MapPost("/api/sessions/start", async (StartSessionDto request, IGameSessionS
     return Results.Ok(session);
 })
 .WithName("StartSession")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapGet("/api/sessions/active", async (SessionManagerService sessionService, MachineMonitoringService machineService) =>
@@ -81,6 +98,7 @@ app.MapGet("/api/sessions/active", async (SessionManagerService sessionService, 
     return Results.Ok(dtos);
 })
 .WithName("GetActiveSessions")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapGet("/api/rfid/{tagUid}", async (string tagUid, IRfidReaderService rfidService) =>
@@ -90,6 +108,7 @@ app.MapGet("/api/rfid/{tagUid}", async (string tagUid, IRfidReaderService rfidSe
     return Results.Ok(new { tag.Id, tag.TagString, tag.UserId, tag.Status });
 })
 .WithName("ValidateTag")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionManagerService sessionService) =>
@@ -98,6 +117,7 @@ app.MapPost("/api/sessions/process-tap", async (ProcessTapDto request, SessionMa
     return Results.Ok(result);
 })
 .WithName("ProcessTap")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapPost("/api/machines/toggle", async (ToggleMachineDto request, MachineMonitoringService machineService) =>
@@ -106,6 +126,7 @@ app.MapPost("/api/machines/toggle", async (ToggleMachineDto request, MachineMoni
     return Results.Ok(result);
 })
 .WithName("ToggleMachine")
+.RequireAuthorization("AdminOrTech")
 .WithOpenApi();
 
 app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
@@ -115,6 +136,7 @@ app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
     return Results.Ok(dtos);
 })
 .WithName("GetMachines")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapGet("/api/sessions/history", async (SessionManagerService sessionService, MachineMonitoringService machineService) =>
@@ -135,6 +157,7 @@ app.MapGet("/api/sessions/history", async (SessionManagerService sessionService,
     return Results.Ok(dtos);
 })
 .WithName("GetSessionHistory")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapGet("/api/sessions/revenue/today", async (SessionManagerService sessionService) =>
@@ -143,6 +166,7 @@ app.MapGet("/api/sessions/revenue/today", async (SessionManagerService sessionSe
     return Results.Ok(result);
 })
 .WithName("GetTodayRevenue")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapGet("/api/machines/logs", async (MachineMonitoringService machineService) =>
@@ -152,6 +176,7 @@ app.MapGet("/api/machines/logs", async (MachineMonitoringService machineService)
     return Results.Ok(dtos);
 })
 .WithName("GetMachineUsageLogs")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 // DEV-16: Auth Proxy Endpoints
@@ -175,13 +200,15 @@ app.MapPost("/api/auth/login", async (LoginDto request, Supabase.Client client) 
 
         var userName = userRecord?.Name ?? authResponse.User.Email ?? "Unknown";
         var userRole = userRecord?.SystemRole ?? "Staff";
+        var token = authResponse.Session?.AccessToken;
 
         return Results.Ok(new
         {
             name = userName,
             email = request.Email,
             role = userRole,
-            authenticated = true
+            authenticated = true,
+            token = token
         });
     }
     catch (Supabase.Gotrue.Exceptions.GotrueException)
@@ -258,6 +285,7 @@ app.MapGet("/api/transactions", async (DateTime? from, DateTime? to, Transaction
     return Results.Ok(dtos);
 })
 .WithName("GetTransactions")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapGet("/api/transactions/summary", async (DateTime? date, TransactionHistoryService txnService) =>
@@ -267,6 +295,95 @@ app.MapGet("/api/transactions/summary", async (DateTime? date, TransactionHistor
     return Results.Ok(result);
 })
 .WithName("GetTransactionSummary")
+.WithOpenApi();
+
+// DEV-22: Analytics Endpoints
+app.MapGet("/api/analytics/peak-hours", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var f = from ?? DateTime.UtcNow.AddDays(-30);
+    var t = to ?? DateTime.UtcNow;
+    return Results.Ok(await analyticsService.GetPeakHoursAsync(f, t));
+})
+.WithName("GetPeakHours")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapGet("/api/analytics/machine-usage", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var f = from ?? DateTime.UtcNow.AddDays(-30);
+    var t = to ?? DateTime.UtcNow;
+    return Results.Ok(await analyticsService.GetMachineUsageAnalyticsAsync(f, t));
+})
+.WithName("GetMachineUsageAnalytics")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapGet("/api/analytics/staffing-recommendations", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var f = from ?? DateTime.UtcNow.AddDays(-90); // 3 months of history for better staffing recs
+    var t = to ?? DateTime.UtcNow;
+    return Results.Ok(await analyticsService.GetStaffingRecommendationsAsync(f, t));
+})
+.WithName("GetStaffingRecommendations")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapGet("/api/analytics/revpamh", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var f = from ?? DateTime.UtcNow.Date; // Today
+    var t = to ?? DateTime.UtcNow;
+    return Results.Ok(await analyticsService.GetRevPAMHAsync(f, t));
+})
+.WithName("GetRevPAMH")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+// DEV-52: Staff Management Endpoints
+
+app.MapGet("/api/staff", async (StaffService staffService) =>
+{
+    var staff = await staffService.GetAllStaffAsync();
+    var dtos = staff.Select(s => new { s.Id, s.Name, s.Email, s.SystemRole, s.CreatedAt });
+    return Results.Ok(dtos);
+})
+.WithName("GetStaff")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapPost("/api/staff", async (RegisterStaffDto request, StaffService staffService, TransactionHistoryService txnService) =>
+{
+    var error = await staffService.RegisterStaffAsync(request.Email, request.Password, request.Name, request.Role);
+    if (error != null) return Results.BadRequest(new { error });
+    
+    await txnService.LogManagerActionAsync("SYSTEM", "StaffCreated", $"Created staff account for {request.Name}");
+    return Results.Ok();
+})
+.WithName("CreateStaff")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, StaffService staffService, TransactionHistoryService txnService) =>
+{
+    var success = await staffService.ChangeRoleAsync(id, request.Role);
+    if (!success) return Results.BadRequest(new { error = "Failed to update role." });
+
+    await txnService.LogManagerActionAsync("SYSTEM", "RoleUpdated", $"Updated role to {request.Role} for user {id}");
+    return Results.Ok();
+})
+.WithName("UpdateStaffRole")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapDelete("/api/staff/{id}", async (Guid id, StaffService staffService, TransactionHistoryService txnService) =>
+{
+    var success = await staffService.DeleteStaffAsync(id);
+    if (!success) return Results.BadRequest(new { error = "Failed to delete user." });
+
+    await txnService.LogManagerActionAsync("SYSTEM", "StaffDeleted", $"Deleted staff account {id}");
+    return Results.Ok();
+})
+.WithName("DeleteStaff")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapPost("/api/audit/log", async (AuditLogDto request, TransactionHistoryService txnService) =>
@@ -284,6 +401,7 @@ app.MapGet("/api/audit/logs", async (int? limit, TransactionHistoryService txnSe
     return Results.Ok(dtos);
 })
 .WithName("GetAuditLogs")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 // DEV-8: Digital Receipt Endpoints
@@ -299,6 +417,7 @@ app.MapGet("/api/receipts", async (DateTime? from, DateTime? to, DigitalReceiptS
     return Results.Ok(dtos);
 })
 .WithName("GetReceipts")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapGet("/api/receipts/search", async (string? q, DigitalReceiptService receiptService) =>
@@ -360,6 +479,7 @@ app.MapGet("/api/staff", async (Supabase.Client client) =>
     }
 })
 .WithName("GetAllStaff")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client, IHttpClientFactory httpClientFactory, IConfiguration config) =>
@@ -431,6 +551,7 @@ app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client,
     }
 })
 .WithName("CreateStaff")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, Supabase.Client client) =>
@@ -462,6 +583,7 @@ app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, Supaba
     }
 })
 .WithName("UpdateStaffRole")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client, IHttpClientFactory httpClientFactory, IConfiguration config) =>
@@ -502,6 +624,7 @@ app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client, IHttpCl
     }
 })
 .WithName("DeleteStaff")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 // DEV-9: Analytics Endpoints
@@ -514,6 +637,7 @@ app.MapGet("/api/analytics/peak-hours", async (DateTime? from, DateTime? to, Ana
     return Results.Ok(result);
 })
 .WithName("GetPeakHours")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapGet("/api/analytics/machine-usage", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
@@ -524,6 +648,7 @@ app.MapGet("/api/analytics/machine-usage", async (DateTime? from, DateTime? to, 
     return Results.Ok(result);
 })
 .WithName("GetMachineUsage")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 // DEV-24: Staffing Recommendations
@@ -535,6 +660,19 @@ app.MapGet("/api/analytics/staffing-recommendations", async (DateTime? from, Dat
     return Results.Ok(result);
 })
 .WithName("GetStaffingRecommendations")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+// DEV-15a: RevPAMH Calculation
+app.MapGet("/api/analytics/revpamh", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+{
+    var fromDate = from ?? DateTime.UtcNow.Date.AddDays(-30);
+    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+    var result = await analyticsService.GetRevPAMHAsync(fromDate, toDate);
+    return Results.Ok(result);
+})
+.WithName("GetRevPAMH")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.Run();
