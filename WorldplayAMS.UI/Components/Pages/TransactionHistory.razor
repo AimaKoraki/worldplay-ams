@@ -1,6 +1,6 @@
 @page "/transactions"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
 @inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
@@ -569,7 +569,7 @@
 
     private async Task LoadTransactions()
     {
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             var from = dateFrom.ToString("yyyy-MM-dd");
@@ -585,7 +585,7 @@
 
     private async Task LoadSummary()
     {
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             var date = dateFrom.ToString("yyyy-MM-dd");
@@ -600,7 +600,7 @@
 
     private async Task LoadAuditLogs()
     {
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             var result = await client.GetFromJsonAsync<List<AuditLogEntryDto>>("/api/audit/logs?limit=30");
@@ -614,7 +614,7 @@
 
     private async Task LogAuditAction(string action, string? details = null)
     {
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             await client.PostAsJsonAsync("/api/audit/log", new { ManagerName = managerName, Action = action, Details = details });

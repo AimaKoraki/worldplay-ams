@@ -11,11 +11,15 @@ namespace WorldplayAMS.API.Services;
 public class StaffService
 {
     private readonly Supabase.Client _client;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _config;
     private readonly ILogger<StaffService> _logger;
 
-    public StaffService(Supabase.Client client, ILogger<StaffService> logger)
+    public StaffService(Supabase.Client client, IHttpClientFactory httpClientFactory, IConfiguration config, ILogger<StaffService> logger)
     {
         _client = client;
+        _httpClientFactory = httpClientFactory;
+        _config = config;
         _logger = logger;
     }
 
@@ -33,27 +37,53 @@ public class StaffService
         }
     }
 
-    public async Task<string?> RegisterStaffAsync(string email, string password, string name, string role)
+    public class StaffRegistrationResult
+    {
+        public bool Success { get; set; }
+        public string? ErrorMessage { get; set; }
+        public string? AuthUserId { get; set; }
+    }
+
+    public async Task<StaffRegistrationResult> RegisterStaffAsync(string email, string password, string name, string role)
     {
         try
         {
-            // First, check if the user context already exists
             var existing = await _client.From<UserContext>().Where(x => x.Email == email).Get();
             if (existing.Models.Any())
             {
-                return "A user with this email already exists.";
+                return new StaffRegistrationResult { Success = false, ErrorMessage = "A user with this email already exists." };
             }
 
-            // Create user in Supabase Auth
-            var session = await _client.Auth.SignUp(email, password);
-            var authUserId = session?.User?.Id;
-            
-            if (string.IsNullOrEmpty(authUserId))
+            var supabaseUrl = _config["Supabase:Url"]!;
+            var serviceRoleKey = _config["Supabase:Key"]!;
+
+            var http = _httpClientFactory.CreateClient();
+            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", serviceRoleKey);
+            http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
+
+            var adminPayload = new
             {
-                return "Failed to create authentication record.";
+                email = email,
+                password = password,
+                email_confirm = true
+            };
+
+            var adminResponse = await http.PostAsJsonAsync($"{supabaseUrl}/auth/v1/admin/users", adminPayload);
+
+            if (!adminResponse.IsSuccessStatusCode)
+            {
+                var errBody = await adminResponse.Content.ReadAsStringAsync();
+                return new StaffRegistrationResult { Success = false, ErrorMessage = "Auth error: " + errBody };
             }
 
-            // Create user context
+            var authUser = await adminResponse.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>();
+            var authUserId = authUser?["id"]?.ToString();
+            
+            if (string.IsNullOrWhiteSpace(authUserId))
+            {
+                return new StaffRegistrationResult { Success = false, ErrorMessage = "Auth user created but ID was missing in the response." };
+            }
+
             var userContext = new UserContext
             {
                 Id = Guid.Parse(authUserId),
@@ -67,17 +97,12 @@ public class StaffService
 
             await _client.From<UserContext>().Insert(userContext);
 
-            return null; // success
-        }
-        catch (Supabase.Gotrue.Exceptions.GotrueException ex)
-        {
-            _logger.LogError(ex, "Gotrue error during staff registration.");
-            return ex.Reason.ToString() ?? "Authentication provider rejected the request.";
+            return new StaffRegistrationResult { Success = true, AuthUserId = authUserId };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error registering staff.");
-            return "Internal server error during registration.";
+            return new StaffRegistrationResult { Success = false, ErrorMessage = "Internal server error during registration." };
         }
     }
 
@@ -100,22 +125,27 @@ public class StaffService
         }
     }
 
-    public async Task<bool> DeleteStaffAsync(Guid userId)
+    public async Task<string?> DeleteStaffAsync(Guid userId)
     {
         try
         {
-            // Note: In Supabase, deleting from UserContext does not automatically delete from Auth schema unless there's a trigger.
-            // But for the sake of the AMS access control, deleting their UserContext completely revokes their access to the system.
-            await _client.From<UserContext>()
-                .Where(x => x.Id == userId)
-                .Delete();
-                
-            return true;
+            await _client.From<UserContext>().Where(x => x.Id == userId).Delete();
+
+            var supabaseUrl = _config["Supabase:Url"]!;
+            var serviceRoleKey = _config["Supabase:Key"]!;
+
+            var http = _httpClientFactory.CreateClient();
+            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", serviceRoleKey);
+            http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
+
+            await http.DeleteAsync($"{supabaseUrl}/auth/v1/admin/users/{userId}");
+            
+            return null; // Success
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting staff.");
-            return false;
+            return ex.Message;
         }
     }
 }

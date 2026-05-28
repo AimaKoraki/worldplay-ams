@@ -7,13 +7,13 @@ namespace WorldplayAMS.API.Services;
 
 public class GameSessionService : IGameSessionService
 {
-    private readonly Supabase.Client _supabase;
+    private readonly ISupabaseRepository _repository;
     private readonly IMemoryCache _cache;
     private readonly ILogger<GameSessionService> _logger;
 
-    public GameSessionService(Supabase.Client supabase, IMemoryCache cache, ILogger<GameSessionService> logger)
+    public GameSessionService(ISupabaseRepository repository, IMemoryCache cache, ILogger<GameSessionService> logger)
     {
-        _supabase = supabase;
+        _repository = repository;
         _cache = cache;
         _logger = logger;
     }
@@ -34,9 +34,7 @@ public class GameSessionService : IGameSessionService
         try
         {
             // Resolve RfidTagId
-            var tagResponse = (await _supabase.From<RfidTag>()
-                                .Where(t => t.TagString == tagUid && t.Status == "Active")
-                                .Get()).Models.FirstOrDefault();
+            var tagResponse = await _repository.GetActiveTagAsync(tagUid);
             
             if (tagResponse == null) 
             {
@@ -46,9 +44,7 @@ public class GameSessionService : IGameSessionService
 
             session.RfidTagId = tagResponse.Id;
 
-            var activeSession = (await _supabase.From<Session>()
-                .Where(s => s.RfidTagId == tagResponse.Id && s.Status == "Active")
-                .Get()).Models.FirstOrDefault();
+            var activeSession = await _repository.GetActiveSessionAsync(tagResponse.Id);
 
             if (activeSession != null)
             {
@@ -58,15 +54,11 @@ public class GameSessionService : IGameSessionService
 
             // E.g., subtract cost from tag etc, skipped for brevity
 
-            var response = await _supabase.From<Session>().Insert(session);
-            var resultingSession = response.Models.FirstOrDefault();
+            await _repository.InsertSessionAsync(session);
 
-            if (resultingSession != null)
-            {
-                // Cache it so it's readily available
-                _cache.Set($"session_{resultingSession.Id}", resultingSession, TimeSpan.FromHours(2));
-            }
-            return resultingSession;
+            // Cache it so it's readily available
+            _cache.Set($"session_{session.Id}", session, TimeSpan.FromHours(2));
+            return session;
         }
         catch (Exception ex)
         {
@@ -83,11 +75,7 @@ public class GameSessionService : IGameSessionService
     {
         try
         {
-            var response = await _supabase.From<Session>()
-                .Where(s => s.Status == "Active")
-                .Get();
-                
-            return response.Models ?? new List<Session>();
+            return await _repository.GetActiveSessionsAsync();
         }
         catch (Exception ex)
         {

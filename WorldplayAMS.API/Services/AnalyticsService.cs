@@ -21,7 +21,7 @@ public class AnalyticsService
         _logger = logger;
     }
 
-    public async Task<object> GetPeakHoursAsync(DateTime from, DateTime to)
+    public async Task<PeakHoursDto?> GetPeakHoursAsync(DateTime from, DateTime to)
     {
         try
         {
@@ -30,7 +30,7 @@ public class AnalyticsService
             // Group by the hour of the day using StartTime
             var startHourGroups = sessions
                 .GroupBy(s => s.StartTime.ToLocalTime().Hour)
-                .Select(g => new
+                .Select(g => new HourlyDataDto
                 {
                     Hour = g.Key,
                     SessionCount = g.Count(),
@@ -42,9 +42,9 @@ public class AnalyticsService
             // Find the absolute peak hour
             var peakHour = startHourGroups.OrderByDescending(x => x.SessionCount).FirstOrDefault();
 
-            return new
+            return new PeakHoursDto
             {
-                DateRange = new { From = from, To = to },
+                DateRange = new DateRangeDto { From = from, To = to },
                 PeakHour = peakHour,
                 HourlyData = startHourGroups
             };
@@ -52,11 +52,11 @@ public class AnalyticsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to aggregate peak hours.");
-            return new { Error = "Failed to aggregate peak hours data." };
+            return null;
         }
     }
 
-    public async Task<object> GetMachineUsageAnalyticsAsync(DateTime from, DateTime to)
+    public async Task<MachineUsageAnalyticsDto?> GetMachineUsageAnalyticsAsync(DateTime from, DateTime to)
     {
         try
         {
@@ -67,7 +67,7 @@ public class AnalyticsService
             var machineUsage = sessions
                 .Where(s => s.MachineId.HasValue)
                 .GroupBy(s => s.MachineId!.Value)
-                .Select(g => new
+                .Select(g => new MachineUsageDto
                 {
                     MachineId = g.Key,
                     MachineName = machineMap.TryGetValue(g.Key, out var name) ? name : "Unknown Machine",
@@ -79,20 +79,20 @@ public class AnalyticsService
                 .OrderByDescending(x => x.TotalSessions)
                 .ToList();
 
-            return new
+            return new MachineUsageAnalyticsDto
             {
-                DateRange = new { From = from, To = to },
+                DateRange = new DateRangeDto { From = from, To = to },
                 MachineUsage = machineUsage
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to aggregate machine usage analytics.");
-            return new { Error = "Failed to aggregate machine usage data." };
+            return null;
         }
     }
 
-    public async Task<object> GetStaffingRecommendationsAsync(DateTime from, DateTime to)
+    public async Task<StaffingRecommendationsDto?> GetStaffingRecommendationsAsync(DateTime from, DateTime to)
     {
         try
         {
@@ -112,7 +112,7 @@ public class AnalyticsService
                     // Ensure it doesn't drop to 0 if there's at least some traffic
                     if (totalSessions > 0 && avgSessions == 0) avgSessions = 1;
 
-                    return new
+                    return new StaffingRecommendationDataDto
                     {
                         DayOfWeek = g.Key.DayOfWeek.ToString(),
                         Hour = g.Key.Hour,
@@ -125,20 +125,20 @@ public class AnalyticsService
                 .ThenBy(x => x.Hour)
                 .ToList();
 
-            return new
+            return new StaffingRecommendationsDto
             {
-                DateRange = new { From = from, To = to },
+                DateRange = new DateRangeDto { From = from, To = to },
                 Recommendations = hourlyData
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to calculate staffing recommendations.");
-            return new { Error = "Failed to calculate staffing recommendations." };
+            return null;
         }
     }
 
-    public async Task<object> GetRevPAMHAsync(DateTime from, DateTime to)
+    public async Task<RevPAMHAnalyticsDto?> GetRevPAMHAsync(DateTime from, DateTime to)
     {
         try
         {
@@ -162,7 +162,7 @@ public class AnalyticsService
             var machineUsage = sessions
                 .Where(s => s.MachineId.HasValue)
                 .GroupBy(s => s.MachineId!.Value)
-                .Select(g => new
+                .Select(g => new MachineRevPAMHDto
                 {
                     MachineId = g.Key,
                     MachineName = machineMap.TryGetValue(g.Key, out var name) ? name : "Unknown Machine",
@@ -172,9 +172,9 @@ public class AnalyticsService
                 .OrderByDescending(x => x.RevPAMH)
                 .ToList();
 
-            return new
+            return new RevPAMHAnalyticsDto
             {
-                DateRange = new { From = from, To = to },
+                DateRange = new DateRangeDto { From = from, To = to },
                 TotalHours = totalHours,
                 ActiveMachineCount = activeMachineCount,
                 TotalAvailableMachineHours = totalAvailableMachineHours,
@@ -186,7 +186,7 @@ public class AnalyticsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to calculate RevPAMH.");
-            return new { Error = "Failed to calculate RevPAMH data." };
+            return null;
         }
     }
 

@@ -1,6 +1,6 @@
 @page "/staffing-alerts"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 @inject IWebHostEnvironment Env
 
 <PageTitle>Worldplay AMS — Staffing Alerts</PageTitle>
@@ -260,7 +260,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        httpClient = ClientFactory.CreateClient("ApiClient");
+        httpClient = ApiClient.CreateClient();
         await LoadRecommendations();
     }
 

@@ -1,6 +1,6 @@
 @page "/"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 @inject IWebHostEnvironment Env
 
 <PageTitle>Worldplay AMS — Dashboard</PageTitle>
@@ -543,7 +543,7 @@
     protected override async Task OnInitializedAsync()
     {
         isDevelopment = Env.IsDevelopment();
-        httpClient = ClientFactory.CreateClient("ApiClient");
+        httpClient = ApiClient.CreateClient();
         await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue(), LoadRevPAMH());
     }
 

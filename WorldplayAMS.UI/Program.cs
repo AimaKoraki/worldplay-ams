@@ -6,13 +6,17 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddScoped<WorldplayAMS.UI.Services.TokenDelegatingHandler>();
+builder.Services.AddScoped<WorldplayAMS.UI.Services.TokenStore>();
+builder.Services.AddScoped<WorldplayAMS.UI.Services.ApiClient>();
 
 // Add HttpClient for communicating with WorldplayAMS.API
+// Note: We do NOT use AddHttpMessageHandler here because DelegatingHandlers
+// are resolved in a different DI scope than the Blazor circuit.
+// Instead, the scoped ApiClient service manually attaches the auth token.
 builder.Services.AddHttpClient("ApiClient", client =>
 {
     client.BaseAddress = new Uri("http://localhost:5089");
-}).AddHttpMessageHandler<WorldplayAMS.UI.Services.TokenDelegatingHandler>();
+});
 
 builder.Services.AddScoped<WorldplayAMS.UI.Services.IReceiptViewerService, WorldplayAMS.UI.Services.ReceiptViewerService>();
 

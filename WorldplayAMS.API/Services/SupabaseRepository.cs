@@ -64,9 +64,21 @@ namespace WorldplayAMS.API.Services
                 .Single();
         }
 
+        public async Task InsertMachineAsync(ArcadeMachine machine)
+        {
+            await _supabase.From<ArcadeMachine>().Insert(machine);
+        }
+
         public async Task UpdateMachineAsync(ArcadeMachine machine)
         {
             await _supabase.From<ArcadeMachine>().Update(machine);
+        }
+
+        public async Task DeleteMachineAsync(Guid machineId)
+        {
+            await _supabase.From<ArcadeMachine>()
+                .Where(m => m.Id == machineId)
+                .Delete();
         }
 
         public async Task<List<ArcadeMachine>> GetAllMachinesAsync()

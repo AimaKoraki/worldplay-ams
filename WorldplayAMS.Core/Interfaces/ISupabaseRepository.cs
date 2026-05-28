@@ -16,7 +16,9 @@ namespace WorldplayAMS.Core.Interfaces
         Task<List<Session>> GetCompletedSessionsAsync();
         
         Task<ArcadeMachine?> GetMachineAsync(Guid machineId);
+        Task InsertMachineAsync(ArcadeMachine machine);
         Task UpdateMachineAsync(ArcadeMachine machine);
+        Task DeleteMachineAsync(Guid machineId);
         Task<List<ArcadeMachine>> GetAllMachinesAsync();
         
         Task<MachineUsageLog?> GetActiveMachineLogAsync(Guid machineId);

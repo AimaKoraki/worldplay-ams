@@ -11,15 +11,17 @@ namespace WorldplayAMS.UI.Auth;
 /// </summary>
 public class SupabaseAuthStateProvider : AuthenticationStateProvider
 {
-    private readonly IHttpClientFactory _clientFactory;
+    private readonly WorldplayAMS.UI.Services.ApiClient _apiClient;
     private readonly ProtectedSessionStorage _sessionStorage;
+    private readonly WorldplayAMS.UI.Services.TokenStore _tokenStore;
     private ClaimsPrincipal _currentUser = new(new ClaimsIdentity());
     private bool _initialized = false;
 
-    public SupabaseAuthStateProvider(IHttpClientFactory clientFactory, ProtectedSessionStorage sessionStorage)
+    public SupabaseAuthStateProvider(WorldplayAMS.UI.Services.ApiClient apiClient, ProtectedSessionStorage sessionStorage, WorldplayAMS.UI.Services.TokenStore tokenStore)
     {
-        _clientFactory = clientFactory;
+        _apiClient = apiClient;
         _sessionStorage = sessionStorage;
+        _tokenStore = tokenStore;
     }
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -33,6 +35,7 @@ public class SupabaseAuthStateProvider : AuthenticationStateProvider
                 if (result.Success && result.Value != null)
                 {
                     _currentUser = BuildClaimsPrincipal(result.Value);
+                    _tokenStore.Token = result.Value.Token;
                 }
             }
             catch
@@ -50,7 +53,7 @@ public class SupabaseAuthStateProvider : AuthenticationStateProvider
     /// </summary>
     public async Task<string?> LoginAsync(string email, string password)
     {
-        var client = _clientFactory.CreateClient("ApiClient");
+        var client = _apiClient.CreateClient();
         try
         {
             var response = await client.PostAsJsonAsync("/api/auth/login", new { Email = email, Password = password });
@@ -61,6 +64,7 @@ public class SupabaseAuthStateProvider : AuthenticationStateProvider
                 if (data != null && data.Authenticated)
                 {
                     _currentUser = BuildClaimsPrincipal(data);
+                    _tokenStore.Token = data.Token;
 
                     try
                     {
@@ -93,6 +97,7 @@ public class SupabaseAuthStateProvider : AuthenticationStateProvider
     public async Task LogoutAsync()
     {
         _currentUser = new ClaimsPrincipal(new ClaimsIdentity());
+        _tokenStore.Token = null;
 
         try
         {

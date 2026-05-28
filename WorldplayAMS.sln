@@ -5,6 +5,12 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldplayAMS.UI", "WorldplayAMS.UI\WorldplayAMS.UI.csproj", "{FD23594C-0294-464B-93F8-6626154091E0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldplayAMS.API", "WorldplayAMS.API\WorldplayAMS.API.csproj", "{740AE331-84D0-4653-95E7-CE52B5845B7F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldplayAMS.Core", "WorldplayAMS.Core\WorldplayAMS.Core.csproj", "{07C9B1D2-2C1D-4BBD-97D7-47191C2B6EC8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldplayAMS.Tests", "WorldplayAMS.Tests\WorldplayAMS.Tests.csproj", "{12892F39-8B0B-4010-BB49-05F72C8DBE71}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +24,17 @@ Global
 		{FD23594C-0294-464B-93F8-6626154091E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FD23594C-0294-464B-93F8-6626154091E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FD23594C-0294-464B-93F8-6626154091E0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{740AE331-84D0-4653-95E7-CE52B5845B7F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{740AE331-84D0-4653-95E7-CE52B5845B7F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{740AE331-84D0-4653-95E7-CE52B5845B7F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{740AE331-84D0-4653-95E7-CE52B5845B7F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{07C9B1D2-2C1D-4BBD-97D7-47191C2B6EC8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{07C9B1D2-2C1D-4BBD-97D7-47191C2B6EC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{07C9B1D2-2C1D-4BBD-97D7-47191C2B6EC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{07C9B1D2-2C1D-4BBD-97D7-47191C2B6EC8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{12892F39-8B0B-4010-BB49-05F72C8DBE71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12892F39-8B0B-4010-BB49-05F72C8DBE71}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12892F39-8B0B-4010-BB49-05F72C8DBE71}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12892F39-8B0B-4010-BB49-05F72C8DBE71}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

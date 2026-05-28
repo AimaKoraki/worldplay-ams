@@ -12,16 +12,16 @@ namespace WorldplayAMS.UI.Services;
 /// </summary>
 public class ReceiptViewerService : IReceiptViewerService
 {
-    private readonly IHttpClientFactory _clientFactory;
+    private readonly ApiClient _apiClient;
 
-    public ReceiptViewerService(IHttpClientFactory clientFactory)
+    public ReceiptViewerService(ApiClient apiClient)
     {
-        _clientFactory = clientFactory;
+        _apiClient = apiClient;
     }
 
     public async Task<List<ReceiptDto>> GetReceiptsAsync(DateTime from, DateTime to)
     {
-        var client = _clientFactory.CreateClient("ApiClient");
+        var client = _apiClient.CreateClient();
         try
         {
             var fromStr = from.ToString("yyyy-MM-dd");
@@ -37,7 +37,7 @@ public class ReceiptViewerService : IReceiptViewerService
 
     public async Task<ReceiptDto?> GetReceiptBySessionIdAsync(Guid sessionId)
     {
-        var client = _clientFactory.CreateClient("ApiClient");
+        var client = _apiClient.CreateClient();
         try
         {
             var result = await client.GetFromJsonAsync<ReceiptDto>($"/api/receipts/{sessionId}");

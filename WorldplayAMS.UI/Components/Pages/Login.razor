@@ -428,7 +428,7 @@
                     if (data != null)
                     {
                         // Use the simulated provider with the real role from DB
-                        ((SimulatedAuthStateProvider)AuthStateProvider).LoginAs(data.Role);
+                        await ((SimulatedAuthStateProvider)AuthStateProvider).LoginAsAsync(data.Role);
                         Nav.NavigateTo("/");
                         return;
                     }
@@ -444,11 +444,11 @@
         isLoading = false;
     }
 
-    private void DemoLogin(string role)
+    private async Task DemoLogin(string role)
     {
         if (AuthStateProvider is SimulatedAuthStateProvider simulatedProvider)
         {
-            simulatedProvider.LoginAs(role);
+            await simulatedProvider.LoginAsAsync(role);
             Nav.NavigateTo("/");
         }
     }

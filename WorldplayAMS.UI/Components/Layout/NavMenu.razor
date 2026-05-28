@@ -60,6 +60,12 @@
                         </NavLink>
                     </div>
                     <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="admin/machines">
+                            <span class="bi bi-joystick nav-icon"></span>
+                            Machine Management
+                        </NavLink>
+                    </div>
+                    <div class="nav-item mb-1">
                         <NavLink class="glass-nav-link" href="admin/staff">
                             <span class="bi bi-people-fill nav-icon"></span>
                             Staff Management
@@ -122,15 +128,15 @@
 @code {
     private async Task Logout()
     {
-        if (AuthStateProvider is SimulatedAuthStateProvider simulatedProvider)
-        {
-            simulatedProvider.Logout();
-            Nav.NavigateTo("/login");
-        }
-        else if (AuthStateProvider is SupabaseAuthStateProvider supabaseProvider)
+        if (AuthStateProvider is WorldplayAMS.UI.Auth.SupabaseAuthStateProvider supabaseProvider)
         {
             await supabaseProvider.LogoutAsync();
-            Nav.NavigateTo("/login", forceLoad: true);
         }
+        else if (AuthStateProvider is WorldplayAMS.UI.Auth.SimulatedAuthStateProvider simulatedProvider)
+        {
+            await simulatedProvider.LogoutAsync();
+        }
+
+        Nav.NavigateTo("/login", forceLoad: true);
     }
 }

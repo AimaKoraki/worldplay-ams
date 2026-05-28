@@ -1,32 +1,21 @@
-using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using System.Net.Http.Headers;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace WorldplayAMS.UI.Services;
 
 public class TokenDelegatingHandler : DelegatingHandler
 {
-    private readonly ProtectedSessionStorage _sessionStorage;
+    private readonly TokenStore _tokenStore;
 
-    public TokenDelegatingHandler(ProtectedSessionStorage sessionStorage)
+    public TokenDelegatingHandler(TokenStore tokenStore)
     {
-        _sessionStorage = sessionStorage;
+        _tokenStore = tokenStore;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        try
+        if (!string.IsNullOrWhiteSpace(_tokenStore.Token))
         {
-            var result = await _sessionStorage.GetAsync<WorldplayAMS.UI.Auth.SupabaseAuthStateProvider.AuthUserData>("auth_user");
-            if (result.Success && result.Value != null && !string.IsNullOrWhiteSpace(result.Value.Token))
-            {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", result.Value.Token);
-            }
-        }
-        catch 
-        { 
-            // Ignore JS interop errors during prerendering
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokenStore.Token);
         }
 
         return await base.SendAsync(request, cancellationToken);

@@ -1,6 +1,6 @@
 @page "/technician"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Technician")]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 @inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Worldplay AMS — Diagnostics</PageTitle>
@@ -334,7 +334,7 @@
 
     private async Task LoadMachines()
     {
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             var result = await client.GetFromJsonAsync<List<MachineDto>>("/api/machines");
@@ -352,7 +352,7 @@
         var currentStatus = machine.Status;
         machine.Status = currentStatus == "InUse" ? "Online" : "InUse";
 
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             var response = await client.PostAsJsonAsync("/api/machines/toggle", new { MachineId = machine.Id, TechnicianName = technicianName });

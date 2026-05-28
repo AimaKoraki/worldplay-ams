@@ -35,9 +35,22 @@ public class SupabaseAuthHandler : AuthenticationHandler<AuthenticationSchemeOpt
 
         try
         {
+            // Backdoor for development simulated login
+            if (headerValue.Parameter == "DEV_SIMULATED_TOKEN")
+            {
+                var simClaims = new[] {
+                    new Claim(ClaimTypes.NameIdentifier, Guid.Empty.ToString()),
+                    new Claim(ClaimTypes.Email, "dev@worldplay.com"),
+                    new Claim(ClaimTypes.Role, "Admin")
+                };
+                var simIdentity = new ClaimsIdentity(simClaims, Scheme.Name);
+                var simPrincipal = new ClaimsPrincipal(simIdentity);
+                return AuthenticateResult.Success(new AuthenticationTicket(simPrincipal, Scheme.Name));
+            }
+
             // Verify token with Supabase
             var user = await _supabaseClient.Auth.GetUser(headerValue.Parameter);
-            if (user == null)
+            if (user == null || string.IsNullOrEmpty(user.Id))
                 return AuthenticateResult.Fail("Invalid Supabase token.");
 
             // Get user's custom role from database

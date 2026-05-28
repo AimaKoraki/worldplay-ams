@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using WorldplayAMS.Core.Models;
-using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
+using WorldplayAMS.Core.Interfaces;
+
+namespace WorldplayAMS.API.Services;
 
     public class SessionManagerService
     {
@@ -41,6 +43,8 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
 
                 if (activeSessionResponse == null)
                 {
+                    if (machineId == null) return "Error: You must select a machine to check in.";
+
                     // Check-in: create new session with optional guest name and machine assignment
                     var newSession = new Session
                     {
@@ -93,18 +97,27 @@ using WorldplayAMS.Core.Interfaces;namespace WorldplayAMS.API.Services;
 
                     // Ceiling for billing, but no artificial 1-min floor
                     session.TotalDurationMinutes = (int)Math.Ceiling(durationMinutes);
-                    session.Fee = session.TotalDurationMinutes * _ratePerMinute;
+                    
+                    // Fetch machine for custom fee rate and digital receipt
+                    string? machineName = null;
+                    decimal rateToUse = _ratePerMinute;
+                    
+                    if (session.MachineId.HasValue)
+                    {
+                        var machine = await _repository.GetMachineAsync(session.MachineId.Value);
+                        machineName = machine?.Name;
+                        if (machine != null && machine.CurrentCostPerPlay.HasValue)
+                        {
+                            rateToUse = machine.CurrentCostPerPlay.Value;
+                        }
+                    }
+
+                    session.Fee = session.TotalDurationMinutes * rateToUse;
                     session.CheckedOutByStaff = staffName ?? "Unknown";
 
                     await _repository.UpdateSessionAsync(session);
 
                     // DEV-8: Auto-generate digital receipt on checkout
-                    string? machineName = null;
-                    if (session.MachineId.HasValue)
-                    {
-                        var machine = await _repository.GetMachineAsync(session.MachineId.Value);
-                        machineName = machine?.Name;
-                    }
                     await _receiptService.GenerateReceiptAsync(session, machineName);
 
                     // DEV-17: Audit log — Check-out with billing

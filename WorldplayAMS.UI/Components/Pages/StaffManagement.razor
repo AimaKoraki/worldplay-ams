@@ -1,6 +1,6 @@
 @page "/admin/staff"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 @inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Worldplay AMS — Staff Management</PageTitle>
@@ -486,7 +486,7 @@
         loadError = string.Empty;
         try
         {
-            var client = ClientFactory.CreateClient("ApiClient");
+            var client = ApiClient.CreateClient();
             var response = await client.GetFromJsonAsync<List<StaffViewModel>>("/api/staff");
             staffList = response ?? new();
         }
@@ -519,7 +519,7 @@
         isCreating = true;
         try
         {
-            var client = ClientFactory.CreateClient("ApiClient");
+            var client = ApiClient.CreateClient();
             var response = await client.PostAsJsonAsync("/api/staff", new
             {
                 Email = newEmail,
@@ -554,7 +554,7 @@
     {
         try
         {
-            var client = ClientFactory.CreateClient("ApiClient");
+            var client = ApiClient.CreateClient();
             var response = await client.PutAsJsonAsync($"/api/staff/{staff.Id}/role", new { Role = staff.PendingRole });
             if (response.IsSuccessStatusCode)
             {
@@ -582,7 +582,7 @@
         isDeleting = true;
         try
         {
-            var client = ClientFactory.CreateClient("ApiClient");
+            var client = ApiClient.CreateClient();
             var response = await client.DeleteAsync($"/api/staff/{staffToDelete.Id}");
             if (response.IsSuccessStatusCode)
             {

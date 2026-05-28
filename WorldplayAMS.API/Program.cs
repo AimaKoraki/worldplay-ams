@@ -132,11 +132,75 @@ app.MapPost("/api/machines/toggle", async (ToggleMachineDto request, MachineMoni
 app.MapGet("/api/machines", async (MachineMonitoringService machineService) =>
 {
     var result = await machineService.GetAllMachinesAsync();
-    var dtos = result.Select(m => new { m.Id, m.Name, m.MachineType, m.Status });
+    var dtos = result.Select(m => new { m.Id, m.Name, m.MachineType, m.Status, FeePerMinute = m.CurrentCostPerPlay });
     return Results.Ok(dtos);
 })
 .WithName("GetMachines")
 .RequireAuthorization("AdminOrStaff")
+.WithOpenApi();
+
+app.MapPost("/api/machines", async (CreateMachineDto request, WorldplayAMS.Core.Interfaces.ISupabaseRepository repository) =>
+{
+    try
+    {
+        var machine = new WorldplayAMS.Core.Models.ArcadeMachine
+        {
+            Id = Guid.NewGuid(),
+            Name = request.Name,
+            MachineType = request.MachineType,
+            Status = "Online",
+            CurrentCostPerPlay = request.FeePerMinute
+        };
+        await repository.InsertMachineAsync(machine);
+        return Results.Ok(new { machine.Id, machine.Name, machine.MachineType, machine.Status, FeePerMinute = machine.CurrentCostPerPlay });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 500);
+    }
+})
+.WithName("CreateMachine")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapPut("/api/machines/{id}", async (Guid id, UpdateMachineDto request, WorldplayAMS.Core.Interfaces.ISupabaseRepository repository) =>
+{
+    try
+    {
+        var machine = await repository.GetMachineAsync(id);
+        if (machine == null) return Results.NotFound();
+
+        machine.Name = request.Name;
+        machine.MachineType = request.MachineType;
+        machine.Status = request.Status;
+        machine.CurrentCostPerPlay = request.FeePerMinute;
+
+        await repository.UpdateMachineAsync(machine);
+        return Results.Ok(new { message = "Machine updated successfully." });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 500);
+    }
+})
+.WithName("UpdateMachine")
+.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+app.MapDelete("/api/machines/{id}", async (Guid id, WorldplayAMS.Core.Interfaces.ISupabaseRepository repository) =>
+{
+    try
+    {
+        await repository.DeleteMachineAsync(id);
+        return Results.Ok(new { message = "Machine deleted successfully." });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 500);
+    }
+})
+.WithName("DeleteMachine")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapGet("/api/sessions/history", async (SessionManagerService sessionService, MachineMonitoringService machineService) =>
@@ -181,7 +245,7 @@ app.MapGet("/api/machines/logs", async (MachineMonitoringService machineService)
 
 // DEV-16: Auth Proxy Endpoints
 
-app.MapPost("/api/auth/login", async (LoginDto request, Supabase.Client client) =>
+app.MapPost("/api/auth/login", async (LoginDto request, Supabase.Client client, WorldplayAMS.API.Services.TransactionHistoryService txnService) =>
 {
     try
     {
@@ -200,7 +264,7 @@ app.MapPost("/api/auth/login", async (LoginDto request, Supabase.Client client) 
 
         var userName = userRecord?.Name ?? authResponse.User.Email ?? "Unknown";
         var userRole = userRecord?.SystemRole ?? "Staff";
-        var token = authResponse.Session?.AccessToken;
+        var token = authResponse?.AccessToken;
 
         return Results.Ok(new
         {
@@ -216,7 +280,6 @@ app.MapPost("/api/auth/login", async (LoginDto request, Supabase.Client client) 
         // DEV-17: Audit log — Failed login attempt
         try
         {
-            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
             await txnService.LogManagerActionAsync("SYSTEM", "LOGIN_FAILED", $"Failed login attempt for: {request.Email}");
         }
         catch { /* best effort */ }
@@ -245,30 +308,85 @@ app.MapPost("/api/seed", async (Supabase.Client client) =>
     var logs = new List<string>();
     try
     {
-        var tag = new WorldplayAMS.Core.Models.RfidTag
-        {
-            Id = Guid.NewGuid(),
-            TagString = "DEMO-TAG-001",
-            UserId = null,
-            Status = "Active"
-        };
-        await client.From<WorldplayAMS.Core.Models.RfidTag>().Insert(tag);
-        logs.Add("RFID tag seeded successfully.");
-    } catch (Exception ex) { logs.Add("RFID Error: " + ex.Message); }
+        // Add Tags
+        var suffix = Guid.NewGuid().ToString()[..6].ToUpper();
+        var t1 = new WorldplayAMS.Core.Models.RfidTag { TagString = $"TAG-{suffix}-1", Status = "Active" };
+        var t2 = new WorldplayAMS.Core.Models.RfidTag { TagString = $"TAG-{suffix}-2", Status = "Active" };
+        
+        var tagsRes = await client.From<WorldplayAMS.Core.Models.RfidTag>().Insert(new List<WorldplayAMS.Core.Models.RfidTag> { t1, t2 });
+        var tag1 = tagsRes.Models[0];
+        var tag2 = tagsRes.Models[1];
+        logs.Add("RFID tags seeded successfully.");
 
-    try
-    {
-        var machineId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var machine = new WorldplayAMS.Core.Models.ArcadeMachine
+        // Add Machines
+        var mc1 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"Cyber Racer {suffix}", MachineType = "Racing", Status = "Online" };
+        var mc2 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"VR Arena {suffix}", MachineType = "VR", Status = "Online" };
+        var mc3 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"Neon Hoops {suffix}", MachineType = "Sports", Status = "Online" };
+        
+        var machinesRes = await client.From<WorldplayAMS.Core.Models.ArcadeMachine>().Insert(new List<WorldplayAMS.Core.Models.ArcadeMachine> { mc1, mc2, mc3 });
+        var m1 = machinesRes.Models[0];
+        var m2 = machinesRes.Models[1];
+        var m3 = machinesRes.Models[2];
+        logs.Add("Arcade machines seeded successfully.");
+
+        // Add Sessions & Receipts (Historical Data)
+        var random = new Random();
+        var sessions = new List<WorldplayAMS.Core.Models.Session>();
+        var receipts = new List<WorldplayAMS.Core.Models.DigitalReceipt>();
+        
+        for (int i = 0; i < 20; i++)
         {
-            Id = machineId,
-            Name = "Cyber Racer Terminal",
-            MachineType = "Racing",
-            Status = "Online"
-        };
-        await client.From<WorldplayAMS.Core.Models.ArcadeMachine>().Insert(machine);
-        logs.Add("Arcade machine seeded successfully.");
-    } catch (Exception ex) { logs.Add("Machine Error: " + ex.Message); }
+            var daysAgo = random.Next(0, 14);
+            var duration = random.Next(15, 120);
+            var machine = i % 3 == 0 ? m1 : (i % 3 == 1 ? m2 : m3);
+            var tag = i % 2 == 0 ? tag1 : tag2;
+            var fee = duration * 0.15m * 100; // Simulated LKR
+
+            var start = DateTime.UtcNow.AddDays(-daysAgo).AddHours(-random.Next(1, 10));
+            var end = start.AddMinutes(duration);
+
+            var session = new WorldplayAMS.Core.Models.Session
+            {
+                Id = Guid.NewGuid(),
+                RfidTagId = tag.Id,
+                MachineId = machine.Id,
+                StartTime = start,
+                EndTime = end,
+                Status = "Completed",
+                TotalDurationMinutes = duration,
+                Fee = fee,
+                GuestName = $"Demo Guest {i}",
+                CheckedOutByStaff = "Admin"
+            };
+            sessions.Add(session);
+        } // close for loop
+
+        var sessionsRes = await client.From<WorldplayAMS.Core.Models.Session>().Insert(sessions);
+        
+        for (int i = 0; i < sessionsRes.Models.Count; i++)
+        {
+            var insertedSession = sessionsRes.Models[i];
+            receipts.Add(new WorldplayAMS.Core.Models.DigitalReceipt
+            {
+                SessionId = insertedSession.Id,
+                ReceiptNumber = $"RCPT-{DateTime.UtcNow:yyyyMMdd}-{random.Next(1000, 9999)}",
+                RfidTagId = insertedSession.RfidTagId,
+                GuestName = insertedSession.GuestName,
+                MachineName = "Arcade Machine", // simplified
+                CheckInTime = insertedSession.StartTime,
+                CheckOutTime = insertedSession.EndTime ?? DateTime.UtcNow,
+                DurationMinutes = insertedSession.TotalDurationMinutes ?? 0,
+                Fee = insertedSession.Fee ?? 0,
+                StaffName = "Admin",
+                IssuedAt = insertedSession.EndTime ?? DateTime.UtcNow,
+                Status = "Issued"
+            });
+        }
+
+        await client.From<WorldplayAMS.Core.Models.DigitalReceipt>().Insert(receipts);
+        logs.Add($"Seeded {sessions.Count} historical sessions and receipts.");
+    }
+    catch (Exception ex) { logs.Add("Error during seeding: " + ex.Message); }
 
     return Results.Ok(logs);
 });
@@ -295,95 +413,6 @@ app.MapGet("/api/transactions/summary", async (DateTime? date, TransactionHistor
     return Results.Ok(result);
 })
 .WithName("GetTransactionSummary")
-.WithOpenApi();
-
-// DEV-22: Analytics Endpoints
-app.MapGet("/api/analytics/peak-hours", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
-{
-    var f = from ?? DateTime.UtcNow.AddDays(-30);
-    var t = to ?? DateTime.UtcNow;
-    return Results.Ok(await analyticsService.GetPeakHoursAsync(f, t));
-})
-.WithName("GetPeakHours")
-.RequireAuthorization("AdminOnly")
-.WithOpenApi();
-
-app.MapGet("/api/analytics/machine-usage", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
-{
-    var f = from ?? DateTime.UtcNow.AddDays(-30);
-    var t = to ?? DateTime.UtcNow;
-    return Results.Ok(await analyticsService.GetMachineUsageAnalyticsAsync(f, t));
-})
-.WithName("GetMachineUsageAnalytics")
-.RequireAuthorization("AdminOnly")
-.WithOpenApi();
-
-app.MapGet("/api/analytics/staffing-recommendations", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
-{
-    var f = from ?? DateTime.UtcNow.AddDays(-90); // 3 months of history for better staffing recs
-    var t = to ?? DateTime.UtcNow;
-    return Results.Ok(await analyticsService.GetStaffingRecommendationsAsync(f, t));
-})
-.WithName("GetStaffingRecommendations")
-.RequireAuthorization("AdminOnly")
-.WithOpenApi();
-
-app.MapGet("/api/analytics/revpamh", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
-{
-    var f = from ?? DateTime.UtcNow.Date; // Today
-    var t = to ?? DateTime.UtcNow;
-    return Results.Ok(await analyticsService.GetRevPAMHAsync(f, t));
-})
-.WithName("GetRevPAMH")
-.RequireAuthorization("AdminOnly")
-.WithOpenApi();
-
-// DEV-52: Staff Management Endpoints
-
-app.MapGet("/api/staff", async (StaffService staffService) =>
-{
-    var staff = await staffService.GetAllStaffAsync();
-    var dtos = staff.Select(s => new { s.Id, s.Name, s.Email, s.SystemRole, s.CreatedAt });
-    return Results.Ok(dtos);
-})
-.WithName("GetStaff")
-.RequireAuthorization("AdminOnly")
-.WithOpenApi();
-
-app.MapPost("/api/staff", async (RegisterStaffDto request, StaffService staffService, TransactionHistoryService txnService) =>
-{
-    var error = await staffService.RegisterStaffAsync(request.Email, request.Password, request.Name, request.Role);
-    if (error != null) return Results.BadRequest(new { error });
-    
-    await txnService.LogManagerActionAsync("SYSTEM", "StaffCreated", $"Created staff account for {request.Name}");
-    return Results.Ok();
-})
-.WithName("CreateStaff")
-.RequireAuthorization("AdminOnly")
-.WithOpenApi();
-
-app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, StaffService staffService, TransactionHistoryService txnService) =>
-{
-    var success = await staffService.ChangeRoleAsync(id, request.Role);
-    if (!success) return Results.BadRequest(new { error = "Failed to update role." });
-
-    await txnService.LogManagerActionAsync("SYSTEM", "RoleUpdated", $"Updated role to {request.Role} for user {id}");
-    return Results.Ok();
-})
-.WithName("UpdateStaffRole")
-.RequireAuthorization("AdminOnly")
-.WithOpenApi();
-
-app.MapDelete("/api/staff/{id}", async (Guid id, StaffService staffService, TransactionHistoryService txnService) =>
-{
-    var success = await staffService.DeleteStaffAsync(id);
-    if (!success) return Results.BadRequest(new { error = "Failed to delete user." });
-
-    await txnService.LogManagerActionAsync("SYSTEM", "StaffDeleted", $"Deleted staff account {id}");
-    return Results.Ok();
-})
-.WithName("DeleteStaff")
-.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapPost("/api/audit/log", async (AuditLogDto request, TransactionHistoryService txnService) =>
@@ -461,12 +490,12 @@ app.MapPost("/api/receipts/{sessionId}/email", async (Guid sessionId, EmailReque
 
 // DEV-52: Staff Management Endpoints (Admin only)
 
-app.MapGet("/api/staff", async (Supabase.Client client) =>
+app.MapGet("/api/staff", async (WorldplayAMS.API.Services.StaffService staffService) =>
 {
     try
     {
-        var users = await client.From<UserContext>().Get();
-        var dtos = users.Models.Select(u => new
+        var users = await staffService.GetAllStaffAsync();
+        var dtos = users.Select(u => new
         {
             u.Id, u.Name, u.Email, u.SystemRole,
             u.FirstName, u.LastName
@@ -478,11 +507,11 @@ app.MapGet("/api/staff", async (Supabase.Client client) =>
         return Results.Json(new { error = ex.Message }, statusCode: 500);
     }
 })
-.WithName("GetAllStaff")
+.WithName("GetStaff")
 .RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
-app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client, IHttpClientFactory httpClientFactory, IConfiguration config) =>
+app.MapPost("/api/staff", async (CreateStaffDto request, WorldplayAMS.API.Services.StaffService staffService, WorldplayAMS.API.Services.TransactionHistoryService txnService) =>
 {
     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
         return Results.BadRequest(new { error = "Email, password, and name are required." });
@@ -493,57 +522,20 @@ app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client,
 
     try
     {
-        // DEV-52: Use the Supabase Admin API instead of client.Auth.SignUp().
-        // SignUp() mutates the shared singleton Supabase.Client's auth session (replacing the
-        // service-role session with the new user's session), breaking all subsequent DB calls.
-        // The Admin API creates the user server-side, confirms email automatically so the
-        // account is immediately usable, and leaves the singleton's session untouched.
-        var supabaseUrl = config["Supabase:Url"]!;
-        var serviceRoleKey = config["Supabase:Key"]!;
-
-        var http = httpClientFactory.CreateClient();
-        http.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", serviceRoleKey);
-        http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
-
-        var adminPayload = new
+        var result = await staffService.RegisterStaffAsync(request.Email, request.Password, request.Name, request.Role);
+        if (!result.Success)
         {
-            email = request.Email,
-            password = request.Password,
-            email_confirm = true   // skip email verification — manager-issued accounts are immediately active
-        };
-
-        var adminResponse = await http.PostAsJsonAsync($"{supabaseUrl}/auth/v1/admin/users", adminPayload);
-
-        if (!adminResponse.IsSuccessStatusCode)
-        {
-            var errBody = await adminResponse.Content.ReadAsStringAsync();
-            return Results.Json(new { error = "Auth error: " + errBody }, statusCode: (int)adminResponse.StatusCode);
+            return Results.Json(new { error = result.ErrorMessage }, statusCode: 500);
         }
-
-        var authUser = await adminResponse.Content.ReadFromJsonAsync<SupabaseAdminUserResponse>();
-        if (string.IsNullOrWhiteSpace(authUser?.Id))
-            return Results.Json(new { error = "Auth user created but ID was missing in the response." }, statusCode: 500);
-
-        // Insert profile row into the Users table (service-role client — RLS bypassed)
-        var newUser = new UserContext
-        {
-            Id = Guid.Parse(authUser.Id),
-            Name = request.Name,
-            Email = request.Email,
-            SystemRole = request.Role
-        };
-        await client.From<UserContext>().Insert(newUser);
 
         // DEV-17: Audit log — Staff created
         try
         {
-            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
             await txnService.LogManagerActionAsync("Admin", "STAFF_CREATED", $"Created {request.Role} account: {request.Name} ({request.Email})");
         }
         catch { /* best effort */ }
 
-        return Results.Ok(new { id = authUser.Id, name = request.Name, email = request.Email, role = request.Role });
+        return Results.Ok(new { id = result.AuthUserId, name = request.Name, email = request.Email, role = request.Role });
     }
     catch (Exception ex)
     {
@@ -554,7 +546,7 @@ app.MapPost("/api/staff", async (CreateStaffDto request, Supabase.Client client,
 .RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
-app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, Supabase.Client client) =>
+app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, WorldplayAMS.API.Services.StaffService staffService, WorldplayAMS.API.Services.TransactionHistoryService txnService) =>
 {
     var validRoles = new[] { "Admin", "Staff", "Technician" };
     if (!validRoles.Contains(request.Role))
@@ -562,15 +554,12 @@ app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, Supaba
 
     try
     {
-        await client.From<UserContext>()
-            .Where(u => u.Id == id)
-            .Set(u => u.SystemRole, request.Role)
-            .Update();
+        var success = await staffService.ChangeRoleAsync(id, request.Role);
+        if (!success) return Results.Json(new { error = "Failed to update role." }, statusCode: 500);
 
         // DEV-17: Audit log — Role changed
         try
         {
-            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
             await txnService.LogManagerActionAsync("Admin", "ROLE_CHANGED", $"User {id} role changed to {request.Role}");
         }
         catch { /* best effort */ }
@@ -586,32 +575,19 @@ app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, Supaba
 .RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
-app.MapDelete("/api/staff/{id}", async (Guid id, Supabase.Client client, IHttpClientFactory httpClientFactory, IConfiguration config) =>
+app.MapDelete("/api/staff/{id}", async (Guid id, WorldplayAMS.API.Services.StaffService staffService, WorldplayAMS.API.Services.TransactionHistoryService txnService) =>
 {
     try
     {
-        // Step 1: Delete the profile row from the Users table
-        await client.From<UserContext>()
-            .Where(u => u.Id == id)
-            .Delete();
-
-        // Step 2: Delete the auth user via Admin API so the account cannot be used to log in.
-        // (The Supabase.Client SDK does not expose admin user deletion — must call REST directly.)
-        var supabaseUrl = config["Supabase:Url"]!;
-        var serviceRoleKey = config["Supabase:Key"]!;
-
-        var http = httpClientFactory.CreateClient();
-        http.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", serviceRoleKey);
-        http.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
-
-        await http.DeleteAsync($"{supabaseUrl}/auth/v1/admin/users/{id}");
-        // Non-fatal: if the auth user was already gone, the profile is already removed above.
+        var error = await staffService.DeleteStaffAsync(id);
+        if (error != null)
+        {
+            return Results.Json(new { error }, statusCode: 500);
+        }
 
         // DEV-17: Audit log — Staff deleted
         try
         {
-            var txnService = app.Services.GetRequiredService<TransactionHistoryService>();
             await txnService.LogManagerActionAsync("Admin", "STAFF_DELETED", $"Deleted staff account: {id}");
         }
         catch { /* best effort */ }
@@ -686,6 +662,9 @@ public record EmailRequestDto(string Email);
 public record LoginDto(string Email, string Password);
 public record CreateStaffDto(string Email, string Password, string Name, string Role);
 public record UpdateRoleDto(string Role);
+
+public record CreateMachineDto(string Name, string MachineType, decimal? FeePerMinute);
+public record UpdateMachineDto(string Name, string MachineType, string Status, decimal? FeePerMinute);
 
 // DEV-52: Minimal projection of the Supabase Admin API user-creation response
 public class SupabaseAdminUserResponse

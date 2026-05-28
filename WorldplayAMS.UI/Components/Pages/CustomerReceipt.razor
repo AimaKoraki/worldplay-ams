@@ -1,7 +1,7 @@
 @page "/r/{SessionId:guid}"
 @layout Layout.EmptyLayout
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
 
@@ -377,7 +377,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             receipt = await client.GetFromJsonAsync<DigitalReceiptDto>($"/api/receipts/{SessionId}");
@@ -415,7 +415,7 @@
         isSendingEmail = true;
         emailMessage = string.Empty;
 
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         var request = new { Email = emailAddress };
 
         try

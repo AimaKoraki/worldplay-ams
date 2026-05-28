@@ -1,6 +1,6 @@
 @page "/asset-logs"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Technician")]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 
 <PageTitle>Worldplay AMS — Asset Usage Logs</PageTitle>
 
@@ -250,7 +250,7 @@
     private async Task LoadLogs()
     {
         isLoading = true;
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             var machinesTask = client.GetFromJsonAsync<List<MachineDto>>("/api/machines");

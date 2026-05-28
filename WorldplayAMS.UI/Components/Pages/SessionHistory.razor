@@ -1,6 +1,6 @@
 @page "/sessions"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Staff")]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 
 <PageTitle>Worldplay AMS — Session Logs</PageTitle>
 
@@ -278,7 +278,7 @@
     private async Task LoadHistory()
     {
         isLoading = true;
-        var client = ClientFactory.CreateClient("ApiClient");
+        var client = ApiClient.CreateClient();
         try
         {
             // Load both active and completed sessions for full dispute resolution

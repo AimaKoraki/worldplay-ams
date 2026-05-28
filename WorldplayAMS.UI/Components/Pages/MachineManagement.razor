@@ -1,0 +1,644 @@
+@page "/admin/machines"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
+
+<PageTitle>Worldplay AMS — Machine Management</PageTitle>
+
+<div class="page-container">
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="page-header-content">
+            <div class="page-title-group">
+                <div class="page-title-icon">
+                    <span class="bi bi-joystick"></span>
+                </div>
+                <div>
+                    <h1 class="page-title">Machine Management</h1>
+                    <p class="page-subtitle">Add, edit, and configure arcade machines</p>
+                </div>
+            </div>
+            <button class="btn-neon btn-neon-cyan" @onclick="OpenCreatePanel" id="btn-add-machine">
+                <span class="bi bi-plus-lg me-2"></span>Add Machine
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="machine-stats-row">
+        <div class="glass-card machine-stat-card">
+            <span class="machine-stat-icon" style="color:var(--status-active);"><span class="bi bi-wifi"></span></span>
+            <div>
+                <span class="machine-stat-val">@machineList.Count(m => m.Status == "Online")</span>
+                <span class="machine-stat-lbl">Online</span>
+            </div>
+        </div>
+        <div class="glass-card machine-stat-card">
+            <span class="machine-stat-icon" style="color:var(--status-logging);"><span class="bi bi-controller"></span></span>
+            <div>
+                <span class="machine-stat-val">@machineList.Count(m => m.Status == "InUse")</span>
+                <span class="machine-stat-lbl">In Use</span>
+            </div>
+        </div>
+        <div class="glass-card machine-stat-card">
+            <span class="machine-stat-icon" style="color:var(--status-error);"><span class="bi bi-tools"></span></span>
+            <div>
+                <span class="machine-stat-val">@machineList.Count(m => m.Status == "Maintenance" || m.Status == "Offline")</span>
+                <span class="machine-stat-lbl">Offline / Maint.</span>
+            </div>
+        </div>
+        <div class="glass-card machine-stat-card">
+            <span class="machine-stat-icon" style="color:var(--neon-cyan);"><span class="bi bi-hdd-stack-fill"></span></span>
+            <div>
+                <span class="machine-stat-val">@machineList.Count</span>
+                <span class="machine-stat-lbl">Total</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Card -->
+    <div class="glass-card">
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border text-info" role="status"></div>
+                <p>Loading machines...</p>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(loadError))
+        {
+            <div class="error-state">
+                <span class="bi bi-exclamation-triangle-fill" style="font-size:2rem; color:var(--status-error);"></span>
+                <p>@loadError</p>
+                <button class="btn-neon btn-neon-cyan" @onclick="LoadMachines">Retry</button>
+            </div>
+        }
+        else if (machineList.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="bi bi-joystick" style="font-size:3rem; color:var(--text-disabled);"></span>
+                <p style="color:var(--text-secondary); margin-top:0.5rem;">No machines found. Add the first one!</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="machine-table" id="machine-table">
+                    <thead>
+                        <tr>
+                            <th>Machine</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Fee / Min</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var machine in machineList)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="machine-name-cell">
+                                        <div class="machine-avatar" style="background:@GetTypeColor(machine.MachineType)22; border-color:@GetTypeColor(machine.MachineType)55;">
+                                            <span class="bi @GetTypeIcon(machine.MachineType)" style="color:@GetTypeColor(machine.MachineType);"></span>
+                                        </div>
+                                        <div>
+                                            <span class="machine-name">@machine.Name</span>
+                                            <span class="machine-id">ID: @machine.Id.ToString()[..8].ToUpper()</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="type-badge" style="color:@GetTypeColor(machine.MachineType); background:@GetTypeColor(machine.MachineType)18; border-color:@GetTypeColor(machine.MachineType)44;">
+                                        @machine.MachineType
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge-neon @GetStatusBadgeClass(machine.Status)">
+                                        <span class="status-dot-sm"></span>
+                                        @machine.Status
+                                    </span>
+                                </td>
+                                <td class="fee-cell">
+                                    @(machine.FeePerMinute.HasValue ? $"LKR {machine.FeePerMinute.Value:F2}" : "Default")
+                                </td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="btn-action btn-edit" @onclick="() => OpenEditPanel(machine)" title="Edit machine">
+                                            <span class="bi bi-pencil-fill"></span>
+                                        </button>
+                                        <button class="btn-action btn-del" @onclick="() => ConfirmDelete(machine)" title="Delete machine">
+                                            <span class="bi bi-trash3-fill"></span>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(actionMessage))
+        {
+            <div class="action-toast @(actionIsError ? "toast-error" : "toast-success")">
+                <span class="bi @(actionIsError ? "bi-x-circle-fill" : "bi-check-circle-fill") me-2"></span>
+                @actionMessage
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Add / Edit Side Panel -->
+@if (isPanelOpen)
+{
+    <div class="panel-overlay" @onclick="ClosePanel">
+        <div class="side-panel glass-card" @onclick:stopPropagation="true">
+            <div class="side-panel-header">
+                <h2 class="side-panel-title">
+                    <span class="bi @(isEditing ? "bi-pencil-fill" : "bi-plus-circle-fill") me-2" style="color:var(--neon-cyan);"></span>
+                    @(isEditing ? "Edit Machine" : "Add Machine")
+                </h2>
+                <button class="btn-close-panel" @onclick="ClosePanel">
+                    <span class="bi bi-x-lg"></span>
+                </button>
+            </div>
+
+            <div class="side-panel-body">
+                <div class="form-group mb-3">
+                    <label class="form-label-custom">Machine Name</label>
+                    <input type="text" class="form-input" @bind="panelModel.Name"
+                           placeholder="e.g. Mario Kart DX" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <label class="form-label-custom">Machine Type</label>
+                    <select class="form-input" @bind="panelModel.MachineType">
+                        <option value="">-- Select Type --</option>
+                        <option value="Racing">Racing</option>
+                        <option value="Shooter">Shooter</option>
+                        <option value="Fighting">Fighting</option>
+                        <option value="Rhythm">Rhythm</option>
+                        <option value="Sports">Sports</option>
+                        <option value="VR">VR</option>
+                        <option value="Classic">Classic Arcade</option>
+                        <option value="Claw">Claw Machine</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                @if (isEditing)
+                {
+                    <div class="form-group mb-3">
+                        <label class="form-label-custom">Status</label>
+                        <select class="form-input" @bind="panelModel.Status">
+                            <option value="Online">Online</option>
+                            <option value="Offline">Offline</option>
+                            <option value="InUse">In Use</option>
+                            <option value="Maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                }
+
+                <div class="form-group mb-4">
+                    <label class="form-label-custom">
+                        Fee Per Minute (LKR)
+                        <span style="color:var(--text-disabled); font-size:0.72rem; font-weight:normal; text-transform:none; letter-spacing:0;">&nbsp;— leave blank for default</span>
+                    </label>
+                    <input type="number" step="0.01" class="form-input" @bind="panelModel.FeePerMinute"
+                           placeholder="0.15" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(panelError))
+                {
+                    <div class="panel-error mb-3">
+                        <span class="bi bi-exclamation-circle-fill me-2"></span>@panelError
+                    </div>
+                }
+
+                <button class="btn-submit-panel" @onclick="SaveMachine" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>Saving...</span>
+                    }
+                    else
+                    {
+                        <span class="bi @(isEditing ? "bi-floppy-fill" : "bi-plus-circle-fill") me-2"></span>
+                        <span>@(isEditing ? "Save Changes" : "Create Machine")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (machineToDelete != null)
+{
+    <div class="panel-overlay" @onclick="CancelDelete">
+        <div class="confirm-modal glass-card" @onclick:stopPropagation="true">
+            <div class="confirm-icon">
+                <span class="bi bi-exclamation-triangle-fill" style="color:var(--status-error); font-size:2.25rem;"></span>
+            </div>
+            <h3 class="confirm-title">Delete Machine?</h3>
+            <p class="confirm-desc">
+                This will permanently remove <strong>@machineToDelete.Name</strong> from the system.
+                Any associated session records may prevent deletion. This action <strong>cannot be undone</strong>.
+            </p>
+            <div class="confirm-actions">
+                <button class="btn-cancel" @onclick="CancelDelete">Cancel</button>
+                <button class="btn-confirm-delete" @onclick="ExecuteDelete" disabled="@isDeleting">
+                    @if (isDeleting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Delete Machine
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    /* ── Page Layout ─────────────────────────────────────── */
+    .page-container { padding: 2rem; max-width: 1150px; margin: 0 auto; }
+
+    .page-header { margin-bottom: 1.5rem; }
+    .page-header-content { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+    .page-title-group { display: flex; align-items: center; gap: 1rem; }
+    .page-title-icon {
+        width: 52px; height: 52px;
+        background: linear-gradient(135deg, rgba(0,240,255,0.15), rgba(157,0,255,0.15));
+        border: 1px solid rgba(0,240,255,0.3);
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; color: var(--neon-cyan);
+    }
+    .page-title { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); margin: 0; }
+    .page-subtitle { font-size: 0.8rem; color: var(--text-secondary); margin: 0; }
+
+    /* ── Stat Cards ──────────────────────────────────────── */
+    .machine-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .machine-stat-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; }
+    .machine-stat-icon { font-size: 1.5rem; }
+    .machine-stat-val { display: block; font-family: var(--font-heading); font-size: 1.6rem; font-weight: 700; color: var(--text-primary); }
+    .machine-stat-lbl { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); }
+
+    /* ── Table ───────────────────────────────────────────── */
+    #machine-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 8px;
+        color: var(--text-primary);
+    }
+    #machine-table thead th {
+        font-family: var(--font-heading);
+        font-size: 0.7rem; font-weight: 700;
+        letter-spacing: 1.5px; text-transform: uppercase;
+        color: var(--text-secondary);
+        padding: 0 1.25rem 0.9rem;
+        border-bottom: 1px solid var(--surface-border);
+    }
+    #machine-table tbody tr td {
+        padding: 1.1rem 1.25rem;
+        background: rgba(255,255,255,0.025);
+        vertical-align: middle;
+        transition: background 0.2s;
+    }
+    #machine-table tbody tr:hover td { background: rgba(0,240,255,0.04); }
+    #machine-table tbody tr td:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+    #machine-table tbody tr td:last-child  { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+    /* Machine name cell */
+    .machine-name-cell { display: flex; align-items: center; gap: 0.85rem; }
+    .machine-avatar {
+        width: 36px; height: 36px; border-radius: 9px; border: 1px solid;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem; flex-shrink: 0;
+    }
+    .machine-name { display: block; font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+    .machine-id { display: block; font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-disabled); margin-top: 1px; }
+
+    /* Type badge */
+    .type-badge {
+        display: inline-block; padding: 0.25rem 0.65rem;
+        border-radius: 20px; border: 1px solid;
+        font-family: var(--font-heading); font-size: 0.72rem; font-weight: 700;
+        letter-spacing: 0.5px; text-transform: uppercase;
+    }
+
+    /* Status badge dot */
+    .badge-neon { display: inline-flex; align-items: center; gap: 5px; }
+    .status-dot-sm {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: currentColor; opacity: 0.85;
+        animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    /* Fee cell */
+    .fee-cell { font-family: var(--font-mono); font-size: 0.875rem; color: var(--text-primary); }
+
+    /* Action buttons */
+    .action-btns { display: flex; gap: 0.5rem; }
+    .btn-action {
+        width: 32px; height: 32px; border-radius: 7px; border: 1px solid;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; font-size: 0.8rem; transition: all 0.2s;
+    }
+    .btn-edit {
+        background: rgba(0,240,255,0.07); border-color: rgba(0,240,255,0.2); color: var(--neon-cyan);
+    }
+    .btn-edit:hover { background: rgba(0,240,255,0.18); border-color: var(--neon-cyan); box-shadow: 0 0 10px rgba(0,240,255,0.3); }
+    .btn-del {
+        background: rgba(255,61,87,0.07); border-color: rgba(255,61,87,0.2); color: var(--status-error);
+    }
+    .btn-del:hover { background: rgba(255,61,87,0.2); border-color: var(--status-error); box-shadow: 0 0 10px rgba(255,61,87,0.3); }
+
+    /* Toast */
+    .action-toast {
+        margin-top: 1rem; padding: 0.75rem 1rem;
+        border-radius: 8px; font-size: 0.85rem;
+        display: flex; align-items: center;
+        animation: slideUp 0.25s ease;
+    }
+    .toast-success { background: rgba(0,230,118,0.1); border: 1px solid rgba(0,230,118,0.3); color: var(--status-active); }
+    .toast-error   { background: rgba(255,61,87,0.08); border: 1px solid rgba(255,61,87,0.3);  color: var(--status-error); }
+
+    /* Loading / Empty / Error states */
+    .loading-state, .empty-state, .error-state {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; padding: 3rem; color: var(--text-secondary);
+        gap: 1rem;
+    }
+
+    /* ── Side Panel ──────────────────────────────────────── */
+    .panel-overlay {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+        z-index: 1000; display: flex; align-items: center; justify-content: flex-end;
+        animation: fadeIn 0.2s ease;
+    }
+    .side-panel {
+        width: 100%; max-width: 420px; height: 100%;
+        border-radius: 0; border-right: none;
+        display: flex; flex-direction: column;
+        animation: slideLeft 0.25s ease;
+        overflow-y: auto;
+    }
+    .side-panel-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 1.5rem 1.75rem 1rem;
+        border-bottom: 1px solid var(--surface-border);
+    }
+    .side-panel-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+    .btn-close-panel {
+        background: var(--surface-raised); border: 1px solid var(--surface-border);
+        color: var(--text-secondary); border-radius: 8px;
+        width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: all 0.2s;
+    }
+    .btn-close-panel:hover { color: var(--text-primary); border-color: var(--surface-border-strong); }
+    .side-panel-body { padding: 1.5rem 1.75rem; flex: 1; }
+
+    .form-label-custom {
+        font-family: var(--font-heading); font-size: 0.72rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary);
+        display: block; margin-bottom: 0.4rem;
+    }
+
+    /* Panel submit button */
+    .btn-submit-panel {
+        width: 100%; padding: 0.85rem 1.5rem;
+        border: none; border-radius: 10px;
+        background: linear-gradient(135deg, var(--neon-cyan), #006fff);
+        color: #000; font-family: var(--font-heading);
+        font-size: 0.95rem; font-weight: 700; letter-spacing: 0.5px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        gap: 0.5rem; transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+        box-shadow: 0 0 18px rgba(0,240,255,0.35);
+    }
+    .btn-submit-panel:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 0 28px rgba(0,240,255,0.55); }
+    .btn-submit-panel:active:not(:disabled) { transform: translateY(0); }
+    .btn-submit-panel:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+    .panel-error {
+        padding: 0.75rem 1rem; border-radius: 8px;
+        background: rgba(255,61,87,0.1); border: 1px solid rgba(255,61,87,0.3);
+        color: var(--status-error); font-size: 0.85rem;
+        display: flex; align-items: center;
+    }
+
+    /* ── Delete Confirm Modal ────────────────────────────── */
+    .confirm-modal {
+        max-width: 440px; width: 90%; margin: auto;
+        padding: 2rem; border-radius: 16px; text-align: center;
+        animation: slideUp 0.25s ease;
+    }
+    .confirm-icon { margin-bottom: 1rem; }
+    .confirm-title { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; }
+    .confirm-desc { color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 1.5rem; line-height: 1.6; }
+    .confirm-actions { display: flex; gap: 1rem; justify-content: center; }
+    .btn-cancel {
+        padding: 0.65rem 1.5rem; border-radius: 8px;
+        background: var(--surface-raised); border: 1px solid var(--surface-border);
+        color: var(--text-primary); cursor: pointer; transition: all 0.2s;
+        font-family: var(--font-heading); font-weight: 600;
+    }
+    .btn-cancel:hover { border-color: var(--surface-border-strong); }
+    .btn-confirm-delete {
+        padding: 0.65rem 1.5rem; border-radius: 8px;
+        background: rgba(255,51,102,0.15); border: 1px solid rgba(255,51,102,0.4);
+        color: var(--status-error); cursor: pointer; transition: all 0.2s;
+        font-family: var(--font-heading); font-weight: 600;
+        display: flex; align-items: center;
+    }
+    .btn-confirm-delete:hover:not(:disabled) { background: rgba(255,51,102,0.3); }
+    .btn-confirm-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Keyframes ───────────────────────────────────────── */
+    @@keyframes slideLeft { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @@keyframes fadeIn    { from { opacity: 0; } to { opacity: 1; } }
+    @@keyframes slideUp   { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private string loadError = string.Empty;
+    private List<MachineDto> machineList = new();
+
+    private bool isPanelOpen = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+    private bool isDeleting = false;
+    private MachineFormModel panelModel = new();
+    private string panelError = string.Empty;
+
+    private MachineDto? machineToDelete;
+    private string actionMessage = string.Empty;
+    private bool actionIsError = false;
+
+    protected override async Task OnInitializedAsync() => await LoadMachines();
+
+    private async Task LoadMachines()
+    {
+        isLoading = true;
+        loadError = string.Empty;
+        var client = ApiClient.CreateClient();
+        try
+        {
+            var result = await client.GetFromJsonAsync<List<MachineDto>>("/api/machines");
+            machineList = result ?? new();
+        }
+        catch (Exception ex)
+        {
+            loadError = "Unable to connect to the backend API. " + ex.Message;
+        }
+        finally { isLoading = false; }
+    }
+
+    private void OpenCreatePanel()
+    {
+        isEditing = false;
+        panelModel = new MachineFormModel { MachineType = "Classic", Status = "Online" };
+        panelError = string.Empty;
+        isPanelOpen = true;
+    }
+
+    private void OpenEditPanel(MachineDto machine)
+    {
+        isEditing = true;
+        panelModel = new MachineFormModel
+        {
+            Id = machine.Id,
+            Name = machine.Name,
+            MachineType = machine.MachineType,
+            Status = machine.Status,
+            FeePerMinute = machine.FeePerMinute
+        };
+        panelError = string.Empty;
+        isPanelOpen = true;
+    }
+
+    private void ClosePanel() => isPanelOpen = false;
+
+    private async Task SaveMachine()
+    {
+        if (string.IsNullOrWhiteSpace(panelModel.Name) || string.IsNullOrWhiteSpace(panelModel.MachineType))
+        {
+            panelError = "Name and Type are required.";
+            return;
+        }
+
+        isSaving = true;
+        panelError = string.Empty;
+        var client = ApiClient.CreateClient();
+
+        try
+        {
+            HttpResponseMessage response = isEditing
+                ? await client.PutAsJsonAsync($"/api/machines/{panelModel.Id}", panelModel)
+                : await client.PostAsJsonAsync("/api/machines", panelModel);
+
+            if (response.IsSuccessStatusCode)
+            {
+                isPanelOpen = false;
+                await LoadMachines();
+                ShowToast(isEditing ? "Machine updated successfully." : "Machine created successfully.", false);
+            }
+            else
+            {
+                var errStr = await response.Content.ReadAsStringAsync();
+                panelError = $"Error: {errStr}";
+            }
+        }
+        catch (Exception ex) { panelError = "API Error: " + ex.Message; }
+        finally { isSaving = false; }
+    }
+
+    private void ConfirmDelete(MachineDto machine) => machineToDelete = machine;
+    private void CancelDelete() => machineToDelete = null;
+
+    private async Task ExecuteDelete()
+    {
+        if (machineToDelete == null) return;
+        isDeleting = true;
+        var client = ApiClient.CreateClient();
+        try
+        {
+            var response = await client.DeleteAsync($"/api/machines/{machineToDelete.Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                ShowToast("Machine deleted.", false);
+                await LoadMachines();
+            }
+            else
+            {
+                ShowToast("Failed to delete — machine may have associated session records.", true);
+            }
+        }
+        catch (Exception ex) { ShowToast("API Error: " + ex.Message, true); }
+        finally { isDeleting = false; machineToDelete = null; }
+    }
+
+    private void ShowToast(string msg, bool isError)
+    {
+        actionMessage = msg;
+        actionIsError = isError;
+        _ = Task.Delay(4000).ContinueWith(_ => { actionMessage = string.Empty; InvokeAsync(StateHasChanged); });
+    }
+
+    // ── Helpers ───────────────────────────────────────────
+    private static string GetStatusBadgeClass(string status) => status switch
+    {
+        "Online"      => "active",
+        "InUse"       => "logging",
+        "Maintenance" => "error",
+        "Offline"     => "error",
+        _             => "idle"
+    };
+
+    private static string GetTypeColor(string type) => type switch
+    {
+        "Racing"   => "#00f0ff",
+        "Shooter"  => "#ff3d57",
+        "Fighting" => "#ff00aa",
+        "Rhythm"   => "#9d00ff",
+        "Sports"   => "#00e676",
+        "VR"       => "#ffb800",
+        "Classic"  => "#2979ff",
+        "Claw"     => "#ff6e40",
+        _          => "#8a95b0"
+    };
+
+    private static string GetTypeIcon(string type) => type switch
+    {
+        "Racing"   => "bi-speedometer2",
+        "Shooter"  => "bi-crosshair",
+        "Fighting" => "bi-lightning-fill",
+        "Rhythm"   => "bi-music-note-beamed",
+        "Sports"   => "bi-trophy-fill",
+        "VR"       => "bi-headset-vr",
+        "Classic"  => "bi-joystick",
+        "Claw"     => "bi-grip-vertical",
+        _          => "bi-controller"
+    };
+
+    private class MachineDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string MachineType { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public decimal? FeePerMinute { get; set; }
+    }
+
+    private class MachineFormModel
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string MachineType { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public decimal? FeePerMinute { get; set; }
+    }
+}

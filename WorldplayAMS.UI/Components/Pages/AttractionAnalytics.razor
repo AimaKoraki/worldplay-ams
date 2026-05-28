@@ -1,6 +1,6 @@
 @page "/attraction-analytics"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
-@inject IHttpClientFactory ClientFactory
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
 
 <PageTitle>Worldplay AMS — Revenue by Attraction</PageTitle>
 
@@ -397,7 +397,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        httpClient = ClientFactory.CreateClient("ApiClient");
+        httpClient = ApiClient.CreateClient();
         await LoadData();
     }
 

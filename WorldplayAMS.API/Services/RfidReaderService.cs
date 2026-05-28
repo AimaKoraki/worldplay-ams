@@ -7,13 +7,13 @@ namespace WorldplayAMS.API.Services;
 
 public class RfidReaderService : IRfidReaderService
 {
-    private readonly Supabase.Client _supabase;
+    private readonly ISupabaseRepository _repository;
     private readonly IMemoryCache _cache;
     private readonly ILogger<RfidReaderService> _logger;
 
-    public RfidReaderService(Supabase.Client supabase, IMemoryCache cache, ILogger<RfidReaderService> logger)
+    public RfidReaderService(ISupabaseRepository repository, IMemoryCache cache, ILogger<RfidReaderService> logger)
     {
-        _supabase = supabase;
+        _repository = repository;
         _cache = cache;
         _logger = logger;
     }
@@ -29,9 +29,7 @@ public class RfidReaderService : IRfidReaderService
 
         try
         {
-            var response = await _supabase.From<RfidTag>()
-                .Where(t => t.TagString == tagUid)
-                .Single();
+            var response = await _repository.GetTagByStringAsync(tagUid);
 
             if (response != null)
             {

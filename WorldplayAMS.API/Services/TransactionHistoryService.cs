@@ -32,7 +32,7 @@ public class TransactionHistoryService
         }
     }
 
-    public async Task<object> GetDailyReconciliationSummaryAsync(DateTime date)
+    public async Task<DailyReconciliationSummaryDto?> GetDailyReconciliationSummaryAsync(DateTime date)
     {
         try
         {
@@ -69,7 +69,7 @@ public class TransactionHistoryService
                 }
             }
 
-            return new 
+            return new DailyReconciliationSummaryDto
             {
                 Date = date.Date,
                 TotalSessions = totalSessions,
@@ -84,7 +84,7 @@ public class TransactionHistoryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get daily summary.");
-            return new { Error = "Failed to generate summary" };
+            return null;
         }
     }
 
