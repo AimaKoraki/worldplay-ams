@@ -250,14 +250,33 @@
         }
     }
 
-    private void DownloadFile()
+    private async Task DownloadFile()
     {
         if (currentJob?.Status == "Completed")
         {
-            // Trigger direct download via API endpoint in a new tab/iframe
-            // We use JS Interop to navigate securely
-            var url = $"{ApiClient.CreateClient().BaseAddress}api/exports/download/{currentJob.JobId}";
-            JSRuntime.InvokeVoidAsync("window.open", url, "_blank");
+            try
+            {
+                var client = ApiClient.CreateClient();
+                var response = await client.GetAsync($"/api/exports/download/{currentJob.JobId}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync();
+                    using var streamRef = new DotNetStreamReference(stream);
+                    var ext = request.Format == "XLSX" ? "xlsx" : "csv";
+                    var filename = $"Export_{request.Category}_{currentJob.JobId.ToString()[..8]}.{ext}";
+                    
+                    await JSRuntime.InvokeVoidAsync("downloadFileFromStream", filename, streamRef);
+                }
+                else
+                {
+                    errorMessage = "Download failed. Server returned: " + response.StatusCode;
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = "Error downloading file: " + ex.Message;
+            }
         }
     }
 

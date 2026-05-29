@@ -86,20 +86,6 @@
             <div class="panel-inner">
                 <p class="section-title"><span class="bi bi-lightning-fill text-cyan"></span> Quick Actions</p>
 
-@if (isDevelopment)
-                {
-                <button class="action-tile action-primary" @onclick="SimulateRfidTap">
-                    <div class="action-icon-box icon-primary">
-                        <span class="bi bi-upc-scan"></span>
-                    </div>
-                    <div class="action-text">
-                        <span class="action-name">Force Network Ping</span>
-                        <span class="action-desc">Simulate RFID tap event</span>
-                    </div>
-                    <span class="bi bi-chevron-right action-arrow"></span>
-                </button>
-                }
-
                 <a href="/scanner" class="action-tile action-cyan">
                     <div class="action-icon-box icon-cyan">
                         <span class="bi bi-radar"></span>
@@ -449,7 +435,6 @@
         flex-shrink: 0;
     }
 
-    .icon-primary { background: linear-gradient(135deg, var(--electric-blue), var(--neon-cyan)); color: #fff; box-shadow: 0 2px 12px rgba(32,96,255,0.35); }
     .icon-cyan    { background: rgba(0,240,255,0.1);   color: var(--neon-cyan); }
     .icon-purple  { background: rgba(157,0,255,0.1);  color: var(--neon-purple); }
     .icon-amber   { background: rgba(255,184,0,0.1);  color: var(--neon-amber); }
@@ -482,7 +467,6 @@
     }
 
     /* Hover accents */
-    .action-primary:hover { border-color: rgba(32,96,255,0.5); background: rgba(32,96,255,0.06); box-shadow: 0 0 16px rgba(32,96,255,0.1); }
     .action-cyan:hover    { border-color: rgba(0,240,255,0.4); background: rgba(0,240,255,0.05); box-shadow: 0 0 16px rgba(0,240,255,0.08); }
     .action-purple:hover  { border-color: rgba(157,0,255,0.4); background: rgba(157,0,255,0.05); box-shadow: 0 0 16px rgba(157,0,255,0.08); }
     .action-amber:hover   { border-color: rgba(255,184,0,0.4); background: rgba(255,184,0,0.05); box-shadow: 0 0 16px rgba(255,184,0,0.08); }
@@ -537,12 +521,10 @@
     private HttpClient httpClient = default!;
     private int machineCount = 0;
     private decimal todayRevenue = 0;
-    private bool isDevelopment = false;
     private RevPAMHDto? revPamhData;
 
     protected override async Task OnInitializedAsync()
     {
-        isDevelopment = Env.IsDevelopment();
         httpClient = ApiClient.CreateClient();
         await Task.WhenAll(LoadSessions(), LoadMachineCount(), LoadTodayRevenue(), LoadRevPAMH());
     }
@@ -599,19 +581,6 @@
         catch
         {
             revPamhData = null;
-        }
-    }
-
-    private async Task SimulateRfidTap()
-    {
-        try
-        {
-            await httpClient.PostAsJsonAsync("/api/sessions/process-tap", new { TagString = "DEMO-TAG-001" });
-            await LoadSessions();
-        }
-        catch
-        {
-            activeSessions.Insert(0, new SessionDto { Id = Guid.NewGuid(), RfidTagId = Guid.NewGuid(), StartTime = DateTime.Now, Status = "Active" });
         }
     }
 
