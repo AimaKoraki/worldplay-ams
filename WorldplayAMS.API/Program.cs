@@ -13,6 +13,12 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 
+// Force Newtonsoft.Json (used by Supabase PostgREST) to always parse DateTime as UTC
+Newtonsoft.Json.JsonConvert.DefaultSettings = () => new Newtonsoft.Json.JsonSerializerSettings
+{
+    DateTimeZoneHandling = Newtonsoft.Json.DateTimeZoneHandling.Utc
+};
+
 // Supabase Configuration
 var supabaseUrl = builder.Configuration["Supabase:Url"] ?? "https://placeholder.supabase.co";
 var supabaseKey = builder.Configuration["Supabase:Key"] ?? "placeholder_key";

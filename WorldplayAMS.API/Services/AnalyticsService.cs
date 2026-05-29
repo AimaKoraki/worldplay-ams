@@ -26,10 +26,9 @@ public class AnalyticsService
         try
         {
             var sessions = await _repository.GetSessionsByDateRangeAsync(from, to);
-
-            // Group by the hour of the day using StartTime
+            var slst = TimeZoneInfo.FindSystemTimeZoneById("Sri Lanka Standard Time");
             var startHourGroups = sessions
-                .GroupBy(s => s.StartTime.ToLocalTime().Hour)
+                .GroupBy(s => TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, slst).Hour)
                 .Select(g => new HourlyDataDto
                 {
                     Hour = g.Key,
@@ -55,7 +54,7 @@ public class AnalyticsService
             {
                 for (int hour = 9; hour <= 22; hour++)
                 {
-                    var count = sessions.Count(s => s.StartTime.ToLocalTime().DayOfWeek == day && s.StartTime.ToLocalTime().Hour == hour);
+                    var count = sessions.Count(s => TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, TimeZoneInfo.FindSystemTimeZoneById("Sri Lanka Standard Time")).DayOfWeek == day && TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, TimeZoneInfo.FindSystemTimeZoneById("Sri Lanka Standard Time")).Hour == hour);
                     double occupancy = (double)count / activeMachinesCount * 100;
                     
                     matrix.Add(new PeakHourMatrixCellDto
@@ -93,6 +92,7 @@ public class AnalyticsService
         try
         {
             var sessions = await _repository.GetSessionsByDateRangeAsync(from, to);
+            var slst = TimeZoneInfo.FindSystemTimeZoneById("Sri Lanka Standard Time");
             var machines = await _machineService.GetAllMachinesAsync();
             var machineMap = machines.ToDictionary(m => m.Id, m => m.Name);
 
@@ -140,7 +140,7 @@ public class AnalyticsService
 
             // Group by Day of Week and Hour
             var hourlyData = sessions
-                .GroupBy(s => new { s.StartTime.ToLocalTime().DayOfWeek, s.StartTime.ToLocalTime().Hour })
+                .GroupBy(s => new { TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, TimeZoneInfo.FindSystemTimeZoneById("Sri Lanka Standard Time")).DayOfWeek, TimeZoneInfo.ConvertTimeFromUtc(s.StartTime, TimeZoneInfo.FindSystemTimeZoneById("Sri Lanka Standard Time")).Hour })
                 .Select(g => 
                 {
                     var totalSessions = g.Count();

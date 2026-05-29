@@ -82,10 +82,10 @@ namespace WorldplayAMS.API.Services;
                     if (session.StartTime.Kind != DateTimeKind.Utc)
                         _logger.LogWarning("StartTime returned from DB with Kind={Kind} (value={Value}). Converting to UTC.", session.StartTime.Kind, session.StartTime);
                     
-                    // Supabase Postgres often returns timestamp without timezone as Unspecified but it represents Local time.
-                    // By specifying it as Local first, ToUniversalTime() correctly shifts it back to the original UTC value.
+                    // Supabase Postgres returns TIMESTAMPTZ as Unspecified, but the value is actually UTC.
+                    // We must specify Kind=Utc, otherwise C# ToUniversalTime() assumes it's Local and subtracts 5.5 hours.
                     var startUtc = session.StartTime.Kind == DateTimeKind.Unspecified 
-                        ? DateTime.SpecifyKind(session.StartTime, DateTimeKind.Local).ToUniversalTime()
+                        ? DateTime.SpecifyKind(session.StartTime, DateTimeKind.Utc) 
                         : session.StartTime.ToUniversalTime();
 
                     var durationMinutes = (endTime - startUtc).TotalMinutes;

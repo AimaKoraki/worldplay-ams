@@ -64,8 +64,12 @@ public class MachineMonitoringService
                 log.Status = "Completed";
                 if (log.EndTime.HasValue) 
                 {
+                    var startUtc = log.StartTime.Kind == DateTimeKind.Unspecified 
+                        ? DateTime.SpecifyKind(log.StartTime, DateTimeKind.Utc) 
+                        : log.StartTime.ToUniversalTime();
+
                     // Fix: Use Math.Ceiling to match session billing logic
-                    log.DurationMinutes = (int)Math.Ceiling((log.EndTime.Value - log.StartTime).TotalMinutes);
+                    log.DurationMinutes = (int)Math.Ceiling((log.EndTime.Value - startUtc).TotalMinutes);
                 }
 
                 await _repository.UpdateMachineLogAsync(log);
