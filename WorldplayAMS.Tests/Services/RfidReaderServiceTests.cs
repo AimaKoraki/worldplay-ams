@@ -45,7 +45,7 @@ namespace WorldplayAMS.Tests.Services
             result.Should().BeEquivalentTo(expectedTag);
             
             // Should be cached now
-            _cache.TryGetValue($"rfid_{tagUid}", out RfidTag cachedTag).Should().BeTrue();
+            _cache.TryGetValue($"rfid_{tagUid}", out RfidTag? cachedTag).Should().BeTrue();
             cachedTag.Should().BeEquivalentTo(expectedTag);
         }
 
@@ -54,7 +54,7 @@ namespace WorldplayAMS.Tests.Services
         {
             // Arrange
             var tagUid = "NON-EXISTENT-TAG";
-            _mockRepo.Setup(r => r.GetTagByStringAsync(tagUid)).ReturnsAsync((RfidTag)null);
+            _mockRepo.Setup(r => r.GetTagByStringAsync(tagUid)).ReturnsAsync((RfidTag?)null);
 
             // Act
             var result = await _service.ValidateTagAsync(tagUid);

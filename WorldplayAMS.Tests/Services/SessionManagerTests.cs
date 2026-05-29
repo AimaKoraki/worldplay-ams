@@ -28,7 +28,7 @@ namespace WorldplayAMS.Tests.Services
             _mockLogger = new Mock<ILogger<SessionManagerService>>();
             _mockReceiptLogger = new Mock<ILogger<DigitalReceiptService>>();
             
-            var inMemorySettings = new Dictionary<string, string> {
+            var inMemorySettings = new Dictionary<string, string?> {
                 {"Billing:RatePerMinute", "0.15"}
             };
             _configuration = new ConfigurationBuilder()
@@ -52,16 +52,17 @@ namespace WorldplayAMS.Tests.Services
             // Arrange
             var tagString = "DEMO-TAG-001";
             var tagId = Guid.NewGuid();
+            var machineId = Guid.NewGuid();
 
             _mockRepo.Setup(r => r.GetTagByStringAsync(tagString))
                 .ReturnsAsync(new RfidTag { Id = tagId, Status = "Active", TagString = tagString });
 
             // Returning null simulates the missing check-in edge case (no active session found)
             _mockRepo.Setup(r => r.GetActiveSessionAsync(tagId))
-                .ReturnsAsync((Session)null);
+                .ReturnsAsync((Session?)null);
 
             // Act
-            var result = await _service.ProcessRfidTapAsync(tagString);
+            var result = await _service.ProcessRfidTapAsync(tagString, machineId: machineId);
 
             // Assert
             result.Should().Be("Success: Checked in!");
@@ -108,7 +109,7 @@ namespace WorldplayAMS.Tests.Services
         {
             // Arrange
             _mockRepo.Setup(r => r.GetTagByStringAsync(It.IsAny<string>()))
-                .ReturnsAsync((RfidTag)null);
+                .ReturnsAsync((RfidTag?)null);
 
             // Act
             var result = await _service.ProcessRfidTapAsync("UNKNOWN-TAG");
@@ -204,6 +205,145 @@ namespace WorldplayAMS.Tests.Services
             // Assert - silent fallback
             result.Should().NotBeNull();
             result.Should().BeEmpty();
+        }
+
+        // ── DEV-25: Today Revenue ────────────────────────────────────────────
+
+        [Fact]
+        public async Task GetTodayRevenueAsync_SumsOnlyTodaysFees()
+        {
+            // Arrange
+            var sessions = new List<Session>
+            {
+                new Session { Id = Guid.NewGuid(), Status = "Completed", EndTime = DateTime.UtcNow, Fee = 100m },
+                new Session { Id = Guid.NewGuid(), Status = "Completed", EndTime = DateTime.UtcNow, Fee = 50m },
+                new Session { Id = Guid.NewGuid(), Status = "Completed", EndTime = DateTime.UtcNow.AddDays(-1), Fee = 200m }
+            };
+
+            _mockRepo.Setup(r => r.GetCompletedSessionsAsync())
+                .ReturnsAsync(sessions);
+
+            // Act
+            var result = await _service.GetTodayRevenueAsync();
+
+            // Assert
+            result.Should().Be(150m);
+        }
+
+        [Fact]
+        public async Task GetTodayRevenueAsync_ReturnsZero_WhenNoCompletedSessions()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetCompletedSessionsAsync())
+                .ReturnsAsync(new List<Session>());
+
+            // Act
+            var result = await _service.GetTodayRevenueAsync();
+
+            // Assert
+            result.Should().Be(0m);
+        }
+
+        [Fact]
+        public async Task GetTodayRevenueAsync_ReturnsZero_WhenRepositoryThrows()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetCompletedSessionsAsync())
+                .ThrowsAsync(new Exception("DB connection failed"));
+
+            // Act
+            var result = await _service.GetTodayRevenueAsync();
+
+            // Assert - silent fallback
+            result.Should().Be(0m);
+        }
+
+        // ── DEV-26: ProcessRfidTap Edge Cases ────────────────────────────────
+
+        [Fact]
+        public async Task ProcessRfidTapAsync_CheckOut_UsesCustomMachineRate()
+        {
+            // Arrange
+            var tagString = "DEMO-TAG-002";
+            var tagId = Guid.NewGuid();
+            var machineId = Guid.NewGuid();
+
+            var session = new Session
+            {
+                Id = Guid.NewGuid(),
+                RfidTagId = tagId,
+                StartTime = DateTime.UtcNow.AddMinutes(-10),
+                Status = "Active",
+                MachineId = machineId
+            };
+
+            _mockRepo.Setup(r => r.GetTagByStringAsync(tagString))
+                .ReturnsAsync(new RfidTag { Id = tagId, Status = "Active", TagString = tagString });
+
+            _mockRepo.Setup(r => r.GetActiveSessionAsync(tagId))
+                .ReturnsAsync(session);
+
+            _mockRepo.Setup(r => r.GetMachineAsync(machineId))
+                .ReturnsAsync(new ArcadeMachine { Id = machineId, Name = "Dance Machine", Status = "Active", CurrentCostPerPlay = 5.0m });
+
+            // Act
+            var result = await _service.ProcessRfidTapAsync(tagString, "Test Staff");
+
+            // Assert — 10 min × 5.0 LKR/min = 50 LKR (not the default 0.15 rate)
+            result.Should().Contain("Success: Checked out.");
+            result.Should().Contain("Fee: LKR");
+
+            _mockRepo.Verify(r => r.UpdateSessionAsync(It.Is<Session>(s =>
+                s.Fee >= 50m)), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessRfidTapAsync_InactiveTag_ReturnsError()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetTagByStringAsync("DISABLED-TAG"))
+                .ReturnsAsync(new RfidTag { Id = Guid.NewGuid(), Status = "Disabled", TagString = "DISABLED-TAG" });
+
+            // Act
+            var result = await _service.ProcessRfidTapAsync("DISABLED-TAG");
+
+            // Assert
+            result.Should().Be("Error: RFID tag is currently 'Disabled'. Cannot process.");
+        }
+
+        [Fact]
+        public async Task ProcessRfidTapAsync_NoMachineSelected_CheckIn_ReturnsError()
+        {
+            // Arrange
+            var tagString = "DEMO-TAG-003";
+            var tagId = Guid.NewGuid();
+
+            _mockRepo.Setup(r => r.GetTagByStringAsync(tagString))
+                .ReturnsAsync(new RfidTag { Id = tagId, Status = "Active", TagString = tagString });
+
+            _mockRepo.Setup(r => r.GetActiveSessionAsync(tagId))
+                .ReturnsAsync((Session?)null);
+
+            // Act — machineId is null (not provided)
+            var result = await _service.ProcessRfidTapAsync(tagString);
+
+            // Assert
+            result.Should().Be("Error: You must select a machine to check in.");
+        }
+
+        [Fact]
+        public async Task ProcessRfidTapAsync_DatabaseDown_FallsBackToCache()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetTagByStringAsync(It.IsAny<string>()))
+                .ThrowsAsync(new Exception("Connection refused"));
+
+            // Act
+            var result = await _service.ProcessRfidTapAsync("ANY-TAG");
+
+            // Assert
+            _mockCache.Verify(c => c.SaveFailedSession("ANY-TAG", "CheckInOutTap"), Times.Once);
+            result.Should().Be("Offline: Tap recorded locally. Will sync when online.");
         }
     }
 }

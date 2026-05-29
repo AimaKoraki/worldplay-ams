@@ -25,8 +25,9 @@ namespace WorldplayAMS.Tests.Services
         }
 
         // Helper: serialize anonymous type → typed DTO for safe cross-assembly assertions
-        private static ReconciliationSummaryDto ToSummaryDto(object result)
+        private static ReconciliationSummaryDto ToSummaryDto(object? result)
         {
+            if (result == null) throw new ArgumentNullException(nameof(result));
             var json = System.Text.Json.JsonSerializer.Serialize(result);
             return System.Text.Json.JsonSerializer.Deserialize<ReconciliationSummaryDto>(json,
                 new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;

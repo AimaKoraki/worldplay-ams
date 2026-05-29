@@ -35,7 +35,7 @@ namespace WorldplayAMS.Tests.Services
             var tagUid = "INVALID-TAG";
             var machineId = Guid.NewGuid();
 
-            _mockRepo.Setup(r => r.GetActiveTagAsync(tagUid)).ReturnsAsync((RfidTag)null);
+            _mockRepo.Setup(r => r.GetActiveTagAsync(tagUid)).ReturnsAsync((RfidTag?)null);
 
             // Act
             var result = await _service.StartSessionAsync(tagUid, machineId);
@@ -64,7 +64,7 @@ namespace WorldplayAMS.Tests.Services
 
             // Assert
             result.Should().NotBeNull();
-            result.Id.Should().Be(existingSession.Id);
+            result!.Id.Should().Be(existingSession.Id);
             _mockRepo.Verify(r => r.InsertSessionAsync(It.IsAny<Session>()), Times.Never);
         }
 
@@ -80,14 +80,14 @@ namespace WorldplayAMS.Tests.Services
                 .ReturnsAsync(new RfidTag { Id = tagId, TagString = tagUid, Status = "Active" });
             
             _mockRepo.Setup(r => r.GetActiveSessionAsync(tagId))
-                .ReturnsAsync((Session)null);
+                .ReturnsAsync((Session?)null);
 
             // Act
             var result = await _service.StartSessionAsync(tagUid, machineId);
 
             // Assert
             result.Should().NotBeNull();
-            result.MachineId.Should().Be(machineId);
+            result!.MachineId.Should().Be(machineId);
             result.RfidTagId.Should().Be(tagId);
             result.Status.Should().Be("Active");
             
@@ -111,5 +111,39 @@ namespace WorldplayAMS.Tests.Services
             // Assert
             result.Should().BeEquivalentTo(expectedSessions);
         }
+
+        [Fact]
+        public async Task StartSessionAsync_FallsBackToMemory_WhenRepositoryThrows()
+        {
+            // Arrange
+            var tagUid = "VALID-TAG";
+            var machineId = Guid.NewGuid();
+
+            _mockRepo.Setup(r => r.GetActiveTagAsync(tagUid))
+                .ThrowsAsync(new Exception("Database is down"));
+
+            // Act
+            var result = await _service.StartSessionAsync(tagUid, machineId);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.Status.Should().Be("Active");
+        }
+
+        [Fact]
+        public async Task GetActiveSessionsAsync_ReturnsEmptyList_WhenRepositoryThrows()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetActiveSessionsAsync())
+                .ThrowsAsync(new Exception("Database is down"));
+
+            // Act
+            var result = await _service.GetActiveSessionsAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().BeEmpty();
+        }
     }
 }
+

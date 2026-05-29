@@ -104,5 +104,123 @@ namespace WorldplayAMS.Tests.Services
                 a.ManagerName == techName && 
                 a.Action == "StopMachineSession")), Times.Once);
         }
+
+        [Fact]
+        public async Task GetAllMachinesAsync_ReturnsMachinesFromRepository()
+        {
+            // Arrange
+            var machines = new List<ArcadeMachine>
+            {
+                new ArcadeMachine { Id = Guid.NewGuid(), Name = "VR Station 1", Status = "Online" },
+                new ArcadeMachine { Id = Guid.NewGuid(), Name = "VR Station 2", Status = "Online" },
+                new ArcadeMachine { Id = Guid.NewGuid(), Name = "Racing Sim", Status = "InUse" }
+            };
+
+            _mockRepo.Setup(r => r.GetAllMachinesAsync())
+                .ReturnsAsync(machines);
+
+            // Act
+            var result = await _service.GetAllMachinesAsync();
+
+            // Assert
+            result.Should().HaveCount(3);
+        }
+
+        [Fact]
+        public async Task GetAllMachinesAsync_ReturnsEmptyList_WhenRepositoryThrows()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetAllMachinesAsync())
+                .ThrowsAsync(new Exception("DB connection failed"));
+
+            // Act
+            var result = await _service.GetAllMachinesAsync();
+
+            // Assert
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GetUsageLogsAsync_ReturnsLogsFromRepository()
+        {
+            // Arrange
+            var logs = new List<MachineUsageLog>
+            {
+                new MachineUsageLog { Id = Guid.NewGuid(), MachineId = Guid.NewGuid(), StartTime = DateTime.UtcNow.AddHours(-2), EndTime = DateTime.UtcNow.AddHours(-1), DurationMinutes = 60, Status = "Completed" },
+                new MachineUsageLog { Id = Guid.NewGuid(), MachineId = Guid.NewGuid(), StartTime = DateTime.UtcNow.AddMinutes(-30), EndTime = null, DurationMinutes = null, Status = "Active" }
+            };
+
+            _mockRepo.Setup(r => r.GetAllMachineUsageLogsAsync())
+                .ReturnsAsync(logs);
+
+            // Act
+            var result = await _service.GetUsageLogsAsync();
+
+            // Assert
+            result.Should().HaveCount(2);
+        }
+
+        [Fact]
+        public async Task GetUsageLogsAsync_ReturnsEmptyList_WhenRepositoryThrows()
+        {
+            // Arrange
+            _mockRepo.Setup(r => r.GetAllMachineUsageLogsAsync())
+                .ThrowsAsync(new Exception("DB connection failed"));
+
+            // Act
+            var result = await _service.GetUsageLogsAsync();
+
+            // Assert
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task ProcessMachineToggleAsync_FallsBackToCache_WhenRepositoryThrows()
+        {
+            // Arrange
+            var machineId = Guid.NewGuid();
+            var techName = "Test Tech";
+
+            _mockRepo.Setup(r => r.GetActiveMachineLogAsync(machineId))
+                .ThrowsAsync(new Exception("DB connection failed"));
+
+            // Act
+            var result = await _service.ProcessMachineToggleAsync(machineId, techName);
+
+            // Assert
+            result.Should().Contain("Offline");
+
+            _mockCache.Verify(c => c.SaveFailedSession(
+                It.Is<string>(s => s.Contains(machineId.ToString())),
+                It.IsAny<string>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessMachineToggleAsync_NoActiveLog_HandlesMissingMachineGracefully()
+        {
+            // Arrange
+            var machineId = Guid.NewGuid();
+            var techName = "Test Tech";
+
+            _mockRepo.Setup(r => r.GetActiveMachineLogAsync(machineId))
+                .ReturnsAsync((MachineUsageLog?)null);
+
+            _mockRepo.Setup(r => r.GetMachineAsync(machineId))
+                .ReturnsAsync((ArcadeMachine?)null);
+
+            // Act
+            var result = await _service.ProcessMachineToggleAsync(machineId, techName);
+
+            // Assert
+            result.Should().Be("Success: Tracking started.");
+
+            // Verify machine status update is NOT called (machine is null)
+            _mockRepo.Verify(r => r.UpdateMachineAsync(It.IsAny<ArcadeMachine>()), Times.Never);
+
+            // Verify audit log is inserted with "Unknown Machine" in the details
+            _mockRepo.Verify(r => r.InsertAuditLogAsync(It.Is<ManagerAuditLog>(a =>
+                a.Action == "StartMachineSession" &&
+                a.Details != null && a.Details.Contains("Unknown Machine"))), Times.Once);
+        }
     }
 }

@@ -121,5 +121,132 @@ namespace WorldplayAMS.Tests.Services
             json.Should().Contain("\"TotalDurationMinutes\":50");
             json.Should().Contain("\"TotalRevenue\":25.0");
         }
+
+        [Fact]
+        public async Task GetRevPAMHAsync_CalculatesSystemRevPAMHCorrectly()
+        {
+            // Arrange
+            var from = new DateTime(2023, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+            var to = new DateTime(2023, 6, 3, 0, 0, 0, DateTimeKind.Utc); // 48 hours
+
+            var machineAId = Guid.NewGuid();
+            var machineBId = Guid.NewGuid();
+
+            var sessions = new List<Session>
+            {
+                new Session { MachineId = machineAId, Fee = 500m, StartTime = from.AddHours(1) },
+                new Session { MachineId = machineBId, Fee = 460m, StartTime = from.AddHours(2) }
+            };
+
+            var machines = new List<ArcadeMachine>
+            {
+                new ArcadeMachine { Id = machineAId, Name = "Machine A", Status = "Online" },
+                new ArcadeMachine { Id = machineBId, Name = "Machine B", Status = "Online" }
+            };
+
+            _mockRepo.Setup(r => r.GetSessionsByDateRangeAsync(from, to)).ReturnsAsync(sessions);
+            _mockRepo.Setup(r => r.GetAllMachinesAsync()).ReturnsAsync(machines);
+
+            // Act
+            var result = await _service.GetRevPAMHAsync(from, to);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.ActiveMachineCount.Should().Be(2);
+            result.TotalHours.Should().Be(48);
+            result.TotalRevenue.Should().Be(960m);
+            // systemRevPAMH = 960 / (2 * 48) = 10.0
+            result.SystemRevPAMH.Should().Be(10.0m);
+        }
+
+        [Fact]
+        public async Task GetRevPAMHAsync_CalculatesPerMachineRevPAMH()
+        {
+            // Arrange
+            var from = new DateTime(2023, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+            var to = new DateTime(2023, 6, 2, 0, 0, 0, DateTimeKind.Utc); // 24 hours
+
+            var machineAId = Guid.NewGuid();
+            var machineBId = Guid.NewGuid();
+
+            var sessions = new List<Session>
+            {
+                new Session { MachineId = machineAId, Fee = 200m, StartTime = from.AddHours(1) },
+                new Session { MachineId = machineAId, Fee = 100m, StartTime = from.AddHours(5) },
+                new Session { MachineId = machineBId, Fee = 150m, StartTime = from.AddHours(3) }
+            };
+
+            var machines = new List<ArcadeMachine>
+            {
+                new ArcadeMachine { Id = machineAId, Name = "Machine A", Status = "Online" },
+                new ArcadeMachine { Id = machineBId, Name = "Machine B", Status = "Online" }
+            };
+
+            _mockRepo.Setup(r => r.GetSessionsByDateRangeAsync(from, to)).ReturnsAsync(sessions);
+            _mockRepo.Setup(r => r.GetAllMachinesAsync()).ReturnsAsync(machines);
+
+            // Act
+            var result = await _service.GetRevPAMHAsync(from, to);
+
+            // Assert
+            result.Should().NotBeNull();
+            // Machine A: revenue = 300, RevPAMH = 300 / 24 = 12.5
+            var machineARevPAMH = result!.MachineRevPAMH.FirstOrDefault(m => m.MachineId == machineAId);
+            machineARevPAMH.Should().NotBeNull();
+            machineARevPAMH!.TotalRevenue.Should().Be(300m);
+            machineARevPAMH.RevPAMH.Should().Be(12.5m);
+
+            // Machine B: revenue = 150, RevPAMH = 150 / 24 = 6.25
+            var machineBRevPAMH = result.MachineRevPAMH.FirstOrDefault(m => m.MachineId == machineBId);
+            machineBRevPAMH.Should().NotBeNull();
+            machineBRevPAMH!.TotalRevenue.Should().Be(150m);
+            machineBRevPAMH.RevPAMH.Should().Be(6.25m);
+        }
+
+        [Fact]
+        public async Task GetRevPAMHAsync_ReturnsNull_WhenExceptionOccurs()
+        {
+            // Arrange
+            var from = DateTime.UtcNow.AddDays(-1);
+            var to = DateTime.UtcNow;
+
+            _mockRepo.Setup(r => r.GetSessionsByDateRangeAsync(from, to))
+                .ThrowsAsync(new Exception("Database connection failed"));
+
+            // Act
+            var result = await _service.GetRevPAMHAsync(from, to);
+
+            // Assert
+            result.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task GetRevPAMHAsync_HandlesZeroMachinesGracefully()
+        {
+            // Arrange
+            var from = new DateTime(2023, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+            var to = new DateTime(2023, 6, 2, 0, 0, 0, DateTimeKind.Utc);
+
+            var sessions = new List<Session>
+            {
+                new Session { MachineId = Guid.NewGuid(), Fee = 100m, StartTime = from.AddHours(1) }
+            };
+
+            var machines = new List<ArcadeMachine>
+            {
+                new ArcadeMachine { Id = Guid.NewGuid(), Name = "Offline Machine", Status = "Offline" }
+            };
+
+            _mockRepo.Setup(r => r.GetSessionsByDateRangeAsync(from, to)).ReturnsAsync(sessions);
+            _mockRepo.Setup(r => r.GetAllMachinesAsync()).ReturnsAsync(machines);
+
+            // Act
+            var result = await _service.GetRevPAMHAsync(from, to);
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.ActiveMachineCount.Should().Be(0);
+            result.SystemRevPAMH.Should().Be(0m);
+        }
     }
 }

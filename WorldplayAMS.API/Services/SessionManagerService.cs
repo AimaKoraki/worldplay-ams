@@ -92,7 +92,7 @@ namespace WorldplayAMS.API.Services;
                     var durationSeconds = (int)Math.Round((endTime - startUtc).TotalSeconds);
                     
                     // Failsafe: prevent negative durations if DB data is corrupted
-                    if (durationMinutes < 0) durationMinutes = 0;
+                    if (durationMinutes < 1) durationMinutes = 1;
                     if (durationSeconds < 0) durationSeconds = 0;
 
                     // Ceiling for billing, but no artificial 1-min floor
@@ -145,6 +145,12 @@ namespace WorldplayAMS.API.Services;
             }
             catch (Exception ex)
             {
+                if (ex.ToString().Contains("idx_unique_active_session") || ex.ToString().Contains("duplicate key value"))
+                {
+                    _logger.LogWarning(ex, "Blocked concurrent check-in attempt for tag '{Tag}'", tagString);
+                    return "Error: This guest already has an active session. Concurrent scan blocked.";
+                }
+
                 _logger.LogError(ex, "Supabase connection failed. Queuing payload.");
                 _fallbackCache.SaveFailedSession(tagString, "CheckInOutTap");
                 return "Offline: Tap recorded locally. Will sync when online.";
