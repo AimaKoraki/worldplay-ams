@@ -38,12 +38,18 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<AnalyticsService>();
 builder.Services.AddScoped<StaffService>();
 
+builder.Services.AddSingleton<ExportJobQueue>();
+builder.Services.AddSingleton<ExportJobStateTracker>();
+builder.Services.AddHostedService<BackgroundExportService>();
+builder.Services.AddScoped<ExportDataService>();
+
 builder.Services.AddAuthentication("Supabase")
     .AddScheme<AuthenticationSchemeOptions, SupabaseAuthHandler>("Supabase", null);
 
 builder.Services.AddAuthorization(options => 
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("AdminOrManager", policy => policy.RequireRole("Admin", "Manager"));
     options.AddPolicy("AdminOrTech", policy => policy.RequireRole("Admin", "Technician"));
     options.AddPolicy("AdminOrStaff", policy => policy.RequireRole("Admin", "Staff"));
 });
@@ -516,9 +522,9 @@ app.MapPost("/api/staff", async (CreateStaffDto request, WorldplayAMS.API.Servic
     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
         return Results.BadRequest(new { error = "Email, password, and name are required." });
 
-    var validRoles = new[] { "Admin", "Staff", "Technician" };
+    var validRoles = new[] { "Admin", "Manager", "Staff", "Technician" };
     if (!validRoles.Contains(request.Role))
-        return Results.BadRequest(new { error = "Role must be Admin, Staff, or Technician." });
+        return Results.BadRequest(new { error = "Role must be Admin, Manager, Staff, or Technician." });
 
     try
     {
@@ -548,9 +554,9 @@ app.MapPost("/api/staff", async (CreateStaffDto request, WorldplayAMS.API.Servic
 
 app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, WorldplayAMS.API.Services.StaffService staffService, WorldplayAMS.API.Services.TransactionHistoryService txnService) =>
 {
-    var validRoles = new[] { "Admin", "Staff", "Technician" };
+    var validRoles = new[] { "Admin", "Manager", "Staff", "Technician" };
     if (!validRoles.Contains(request.Role))
-        return Results.BadRequest(new { error = "Role must be Admin, Staff, or Technician." });
+        return Results.BadRequest(new { error = "Role must be Admin, Manager, Staff, or Technician." });
 
     try
     {
@@ -640,15 +646,85 @@ app.MapGet("/api/analytics/staffing-recommendations", async (DateTime? from, Dat
 .WithOpenApi();
 
 // DEV-15a: RevPAMH Calculation
-app.MapGet("/api/analytics/revpamh", async (DateTime? from, DateTime? to, AnalyticsService analyticsService) =>
+app.MapGet("/api/analytics/revpamh", async (DateTime? from, DateTime? to, string? category, AnalyticsService analyticsService) =>
 {
-    var fromDate = from ?? DateTime.UtcNow.Date.AddDays(-30);
-    var toDate = to ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
-    var result = await analyticsService.GetRevPAMHAsync(fromDate, toDate);
-    return Results.Ok(result);
+    var fromDate = from ?? DateTime.UtcNow.AddDays(-30);
+    var toDate = to ?? DateTime.UtcNow;
+    var result = await analyticsService.GetRevPAMHAsync(fromDate, toDate, category);
+    return result != null ? Results.Ok(result) : Results.StatusCode(500);
 })
+.RequireAuthorization("AdminOrManager")
 .WithName("GetRevPAMH")
-.RequireAuthorization("AdminOnly")
+.WithOpenApi();
+
+// DEV-XX: Data Export Endpoints
+app.MapPost("/api/exports/request", async (ExportJobRequest request, ExportJobStateTracker tracker, ExportJobQueue queue, ISupabaseRepository repository, ExportDataService exportDataService) =>
+{
+    var jobId = Guid.NewGuid();
+    var status = new ExportJobStatus { JobId = jobId, Status = "Pending" };
+    tracker.AddJob(status);
+
+    ExportDataService.JobRequests[jobId] = request;
+
+    // Estimate dataset size
+    int recordCount = 0;
+    if (request.Category == "Transactions" || request.Category == "Sales")
+    {
+        recordCount = await repository.GetSessionsCountByDateRangeAsync(request.FromDate, request.ToDate.AddDays(1).AddTicks(-1));
+    }
+    else if (request.Category == "Machines" || request.Category == "Inventory")
+    {
+        recordCount = await repository.GetMachinesCountAsync();
+    }
+    else if (request.Category == "AuditLogs" || request.Category == "User Logs")
+    {
+        recordCount = await repository.GetAuditLogsCountAsync();
+    }
+
+    if (recordCount > 50000)
+    {
+        // Send to background queue
+        await queue.QueueJobAsync(jobId);
+        return Results.Accepted($"/api/exports/status/{jobId}", status);
+    }
+    else
+    {
+        // Process synchronously
+        status.Status = "Processing";
+        await exportDataService.ProcessJobAsync(jobId, default);
+        var completedStatus = tracker.GetJob(jobId);
+        return Results.Ok(completedStatus);
+    }
+})
+.WithName("RequestExport")
+.RequireAuthorization("AdminOrManager")
+.WithOpenApi();
+
+app.MapGet("/api/exports/status/{jobId}", (Guid jobId, ExportJobStateTracker tracker) =>
+{
+    var status = tracker.GetJob(jobId);
+    if (status == null) return Results.NotFound();
+    return Results.Ok(status);
+})
+.WithName("GetExportStatus")
+.RequireAuthorization("AdminOrManager")
+.WithOpenApi();
+
+app.MapGet("/api/exports/download/{jobId}", (Guid jobId, ExportJobStateTracker tracker) =>
+{
+    var status = tracker.GetJob(jobId);
+    if (status == null || status.Status != "Completed" || status.FilePath == null) 
+        return Results.NotFound("File not ready or job not found.");
+        
+    var bytes = System.IO.File.ReadAllBytes(status.FilePath);
+    
+    // Clean up file after reading into memory (optional, but good for temp cleanup)
+    try { System.IO.File.Delete(status.FilePath); } catch { }
+
+    return Results.File(bytes, status.ContentType ?? "application/octet-stream", status.FileName);
+})
+.WithName("DownloadExport")
+.AllowAnonymous()
 .WithOpenApi();
 
 app.Run();

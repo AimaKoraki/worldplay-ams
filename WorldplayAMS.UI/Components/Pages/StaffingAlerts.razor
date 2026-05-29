@@ -16,6 +16,10 @@
             <p class="dash-subtitle">Predictive staffing alerts based on historical arcade usage trends</p>
         </div>
         <div class="dash-header-actions">
+            <div style="display:flex; align-items:center; gap: 0.5rem;">
+                <label style="color:var(--text-secondary); font-size:0.85rem;">Baseline Staff:</label>
+                <input type="number" min="1" max="20" class="form-input" style="width:70px; padding:0.3rem; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.1); color:white; border-radius:4px;" @bind="BaselineStaff" @bind:after="UpdateAlerts" />
+            </div>
             <button class="btn-neon btn-neon-purple" @onclick="LoadRecommendations">
                 <span class="bi bi-arrow-repeat"></span> Refresh Data
             </button>
@@ -24,6 +28,20 @@
 
     <!-- Main Content -->
     <div style="display:flex; flex-direction:column; gap:1.5rem;">
+
+        <!-- Alerts -->
+        @if (!string.IsNullOrEmpty(underStaffedWarning))
+        {
+            <div class="glass-alert" style="background: rgba(255,50,50,0.1); border-color: rgba(255,50,50,0.3); color: #ff8888;">
+                <span class="bi bi-exclamation-triangle-fill me-2"></span> @underStaffedWarning
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(overStaffedAlert))
+        {
+            <div class="glass-alert" style="background: rgba(50,255,100,0.1); border-color: rgba(50,255,100,0.3); color: #88ffaa;">
+                <span class="bi bi-info-circle-fill me-2"></span> @overStaffedAlert
+            </div>
+        }
 
         <!-- Heatmap Panel -->
         <section class="panel-card">
@@ -91,7 +109,7 @@
                                     var intensity = MaxSessions > 0 ? (double)sessions / MaxSessions : 0;
                                     var bg        = GetCellColor(intensity);
                                     var isPeak    = sessions == MaxSessions && MaxSessions > 0;
-                                    var tooltip   = $"{day} {h:D2}:00–{h+1:D2}:00 · Avg {sessions} sessions · {staff} staff recommended";
+                                    var tooltip   = $"{day} {h:D2}:00–{h+1:D2}:00 · Avg {sessions} sessions · {staff} staff recommended · {GetConfidence(day, h)}";
 
                                     <div class="heat-cell @(isPeak ? "heat-cell-peak" : "")"
                                          style="background: @bg;"
@@ -412,6 +430,10 @@
     private string? errorMessage = null;
     private List<StaffingRecommendation> recommendations = new();
 
+    private int BaselineStaff { get; set; } = 4;
+    private string? underStaffedWarning;
+    private string? overStaffedAlert;
+
     // Ordered day columns Mon → Sun
     private static readonly string[] DayNames =
         { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
@@ -446,6 +468,63 @@
 
     private int GetStaff(string day, int hour) =>
         lookup.TryGetValue((day, hour), out var r) ? r.RecommendedStaff : 0;
+
+    private string GetConfidence(string day, int hour) =>
+        lookup.TryGetValue((day, hour), out var r) ? r.Confidence : "";
+
+    private void UpdateAlerts()
+    {
+        underStaffedWarning = null;
+        overStaffedAlert = null;
+
+        if (recommendations == null || !recommendations.Any()) return;
+
+        var peakDeficit = recommendations
+            .Where(r => r.RecommendedStaff > BaselineStaff)
+            .OrderByDescending(r => r.RecommendedStaff - BaselineStaff)
+            .FirstOrDefault();
+
+        if (peakDeficit != null)
+        {
+            int deficit = peakDeficit.RecommendedStaff - BaselineStaff;
+            underStaffedWarning = $"Under-staffed: Recommend adding {deficit} additional staff members.";
+        }
+
+        double threshold = BaselineStaff * 0.30;
+        int maxOptimizable = 0;
+
+        foreach (var day in DayNames)
+        {
+            int consecutiveCount = 0;
+            int currentOptimizable = 0;
+
+            for (int h = 9; h <= 22; h++)
+            {
+                var rec = lookup.TryGetValue((day, h), out var r) ? r : null;
+                if (rec != null && rec.RecommendedStaff < threshold)
+                {
+                    consecutiveCount++;
+                    int savings = BaselineStaff - rec.RecommendedStaff;
+                    if (savings > currentOptimizable) currentOptimizable = savings;
+
+                    if (consecutiveCount >= 3 && currentOptimizable > maxOptimizable)
+                    {
+                        maxOptimizable = currentOptimizable;
+                    }
+                }
+                else
+                {
+                    consecutiveCount = 0;
+                    currentOptimizable = 0;
+                }
+            }
+        }
+
+        if (maxOptimizable > 0)
+        {
+            overStaffedAlert = $"Over-staffed: Opportunity to optimize roster by {maxOptimizable} staff shifts.";
+        }
+    }
 
     /// <summary>
     /// Maps intensity [0..1] to an RGBA color string:
@@ -512,6 +591,8 @@
                 // Build lookup for O(1) cell access
                 foreach (var rec in recommendations)
                     lookup[(rec.DayOfWeek, rec.Hour)] = rec;
+
+                UpdateAlerts();
             }
         }
         catch (Exception ex)
@@ -538,5 +619,6 @@
         public string DisplayHour   { get; set; } = string.Empty;
         public int    AverageSessions { get; set; }
         public int    RecommendedStaff { get; set; }
+        public string Confidence    { get; set; } = string.Empty;
     }
 }

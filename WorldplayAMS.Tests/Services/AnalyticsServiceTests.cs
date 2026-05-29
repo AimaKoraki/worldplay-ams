@@ -81,16 +81,17 @@ namespace WorldplayAMS.Tests.Services
                 sessions.Add(new Session { StartTime = new DateTime(2023, 1, 2, 14, 0, 0, DateTimeKind.Utc) }); // Jan 2, 2023 was a Monday
             }
 
-            _mockRepo.Setup(r => r.GetSessionsByDateRangeAsync(from, to)).ReturnsAsync(sessions);
+            _mockRepo.Setup(r => r.GetSessionsByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>())).ReturnsAsync(sessions);
 
             // Act
             var result = await _service.GetStaffingRecommendationsAsync(from, to);
 
             // Assert
             var json = System.Text.Json.JsonSerializer.Serialize(result);
-            // 5 avg sessions should recommend 3 staff (base 2 + 1 for 5 sessions)
-            json.Should().Contain("\"AverageSessions\":5");
-            json.Should().Contain("\"RecommendedStaff\":3");
+            // 10 sessions over 4 weeks (28 days) = ~2 avg sessions
+            json.Should().Contain("\"AverageSessions\":2");
+            json.Should().Contain("\"RecommendedStaff\":1");
+            json.Should().Contain("\"Confidence\":\"Confidence: 85%\"");
         }
 
         [Fact]

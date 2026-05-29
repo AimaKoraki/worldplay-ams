@@ -77,10 +77,26 @@
                             Staffing Alerts
                         </NavLink>
                     </div>
+                </AuthorizeView>
+
+                <AuthorizeView Roles="Admin,Manager" Context="managerContext">
+                    <span class="nav-section-label" style="margin-top:0.75rem;">Intelligence</span>
                     <div class="nav-item mb-1">
                         <NavLink class="glass-nav-link" href="attraction-analytics">
                             <span class="bi bi-bar-chart-fill nav-icon"></span>
                             Attraction Analytics
+                        </NavLink>
+                    </div>
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="peak-hours">
+                            <span class="bi bi-grid-3x3-gap-fill nav-icon"></span>
+                            Peak Hours
+                        </NavLink>
+                    </div>
+                    <div class="nav-item mb-1">
+                        <NavLink class="glass-nav-link" href="export">
+                            <span class="bi bi-cloud-download-fill nav-icon"></span>
+                            Data Export
                         </NavLink>
                     </div>
                 </AuthorizeView>

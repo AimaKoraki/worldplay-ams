@@ -1,5 +1,5 @@
 @page "/attraction-analytics"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, Manager")]
 @inject WorldplayAMS.UI.Services.ApiClient ApiClient
 
 <PageTitle>Worldplay AMS — Revenue by Attraction</PageTitle>
@@ -9,12 +9,18 @@
     <div class="dash-header">
         <div>
             <h1 class="dash-title">
-                <span class="bi bi-bar-chart-fill me-3 dash-title-icon text-purple"></span>Revenue by Attraction
+                <span class="bi bi-bar-chart-fill me-3 dash-title-icon text-purple"></span>Financial Intelligence
             </h1>
-            <p class="dash-subtitle">Analyze machine performance, revenue, and usage to optimize pricing</p>
+            <p class="dash-subtitle">Analyze machine performance, revenue, and RevPAMH grouped by attraction zones</p>
         </div>
         <div class="dash-header-actions">
             <div class="date-picker-group">
+                <select class="glass-input me-3" @bind="selectedCategory">
+                    <option value="All">All Categories</option>
+                    <option value="VR Simulator">VR Simulator</option>
+                    <option value="Bowling Alley">Bowling Alley</option>
+                    <option value="Classic Arcade">Classic Arcade</option>
+                </select>
                 <input type="date" class="glass-input" @bind="fromDate" />
                 <span class="text-secondary mx-2">to</span>
                 <input type="date" class="glass-input" @bind="toDate" />
@@ -38,14 +44,14 @@
             <span class="bi bi-exclamation-triangle-fill me-2"></span> @errorMessage
         </div>
     }
-    else if (analyticsData == null || !analyticsData.MachineUsage.Any())
+    else if (analyticsData == null || !analyticsData.MachineRevPAMH.Any())
     {
         <div class="empty-state">
             <div class="empty-icon-ring">
                 <span class="bi bi-inbox text-secondary" style="font-size:2.5rem;"></span>
             </div>
             <h3 class="empty-heading mt-4">No Data Available</h3>
-            <p class="empty-desc mt-1">No sessions were found for the selected date range.</p>
+            <p class="empty-desc mt-1">No sessions were found for the selected date range and category.</p>
         </div>
     }
     else
@@ -59,7 +65,7 @@
                         <span class="bi bi-cash-coin"></span>
                     </div>
                     <div class="kpi-data">
-                        <span class="kpi-value">LKR @TotalRevenue.ToString("N2")</span>
+                        <span class="kpi-value">LKR @analyticsData.TotalRevenue.ToString("N2")</span>
                         <span class="kpi-label">Total Revenue</span>
                     </div>
                 </div>
@@ -71,8 +77,8 @@
                         <span class="bi bi-joystick"></span>
                     </div>
                     <div class="kpi-data">
-                        <span class="kpi-value">@TotalSessions</span>
-                        <span class="kpi-label">Total Plays</span>
+                        <span class="kpi-value">LKR @analyticsData.SystemRevPAMH.ToString("N2")</span>
+                        <span class="kpi-label">System RevPAMH</span>
                     </div>
                 </div>
             </div>
@@ -83,8 +89,8 @@
                         <span class="bi bi-clock-history"></span>
                     </div>
                     <div class="kpi-data">
-                        <span class="kpi-value">@TotalDurationMin<span style="font-size: 1rem; color: var(--text-secondary);">m</span></span>
-                        <span class="kpi-label">Total Play Time</span>
+                        <span class="kpi-value">@analyticsData.TotalHours.ToString("0.##") hrs</span>
+                        <span class="kpi-label">Total Time Span</span>
                     </div>
                 </div>
             </div>
@@ -102,26 +108,54 @@
             </div>
         </div>
 
+        <!-- RevPAMH Bar Chart Widget (CSS Based for <2.5s rendering) -->
+        <section class="panel-card mt-4">
+            <div class="panel-accent accent-cyan"></div>
+            <div class="panel-inner">
+                <p class="section-title mb-4"><span class="bi bi-bar-chart-steps text-cyan"></span> RevPAMH by Attraction Zone</p>
+                
+                <div class="chart-container">
+                    @foreach (var machine in analyticsData.MachineRevPAMH)
+                    {
+                        var maxRevPAMH = analyticsData.MachineRevPAMH.Max(m => m.RevPAMH);
+                        var barWidth = maxRevPAMH > 0 ? (machine.RevPAMH / maxRevPAMH) * 100 : 0;
+                        
+                        <div class="chart-row">
+                            <div class="chart-label">
+                                <span class="fw-bold">@machine.MachineName</span>
+                                <span class="chart-sublabel">@machine.Category</span>
+                            </div>
+                            <div class="chart-bar-area">
+                                <div class="chart-bar" style="width: @barWidth.ToString("0.##")%"></div>
+                                <span class="chart-value">LKR @machine.RevPAMH.ToString("N2")</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Table -->
         <section class="panel-card mt-4">
             <div class="panel-accent accent-purple"></div>
             <div class="panel-inner">
-                <p class="section-title mb-4"><span class="bi bi-table text-purple"></span> Attraction Performance Metrics</p>
+                <p class="section-title mb-4"><span class="bi bi-table text-purple"></span> Financial Intelligence Metrics</p>
                 <div class="table-responsive">
                     <table class="table-glass">
                         <thead>
                             <tr>
                                 <th>Attraction Name</th>
-                                <th class="text-end">Total Plays</th>
-                                <th class="text-end">Avg Duration</th>
-                                <th class="text-end">Total Duration</th>
+                                <th>Category</th>
                                 <th class="text-end">Total Revenue</th>
+                                <th class="text-end">RevPAMH</th>
                                 <th class="text-center">Performance Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var machine in analyticsData.MachineUsage)
+                            @foreach (var machine in analyticsData.MachineRevPAMH)
                             {
-                                var revenueShare = TotalRevenue > 0 ? (machine.TotalRevenue / TotalRevenue) * 100 : 0;
+                                var maxRevPAMH = analyticsData.MachineRevPAMH.Any() ? analyticsData.MachineRevPAMH.Max(m => m.RevPAMH) : 0;
+                                var performanceShare = maxRevPAMH > 0 ? (machine.RevPAMH / maxRevPAMH) * 100 : 0;
                                 
                                 <tr class="table-row-hover">
                                     <td class="fw-bold text-light">
@@ -132,16 +166,15 @@
                                             @machine.MachineName
                                         </div>
                                     </td>
-                                    <td class="text-end font-mono">@machine.TotalSessions</td>
-                                    <td class="text-end font-mono text-secondary">@machine.AverageDurationMinutes.ToString("0.0")m</td>
-                                    <td class="text-end font-mono text-secondary">@machine.TotalDurationMinutes<span style="font-size: 0.8em">m</span></td>
+                                    <td><span class="badge bg-secondary">@machine.Category</span></td>
                                     <td class="text-end font-mono fw-bold" style="color: var(--status-active);">LKR @machine.TotalRevenue.ToString("N2")</td>
+                                    <td class="text-end font-mono fw-bold text-cyan">LKR @machine.RevPAMH.ToString("N2")</td>
                                     <td class="text-center">
-                                        @if (revenueShare >= 20)
+                                        @if (performanceShare >= 80)
                                         {
                                             <span class="badge-neon active"><span class="bi bi-star-fill"></span> Top Earner</span>
                                         }
-                                        else if (revenueShare < 5 && machine.TotalSessions > 0)
+                                        else if (performanceShare < 20 && machine.TotalRevenue > 0)
                                         {
                                             <span class="badge-neon idle"><span class="bi bi-arrow-down-circle"></span> Underperforming</span>
                                         }
@@ -150,7 +183,7 @@
                                             <span class="badge-neon" style="color: var(--neon-cyan); border-color: rgba(0,240,255,0.3); background: rgba(0,240,255,0.05);">Standard</span>
                                         }
                                         <div class="progress mt-2" style="height: 4px; background: rgba(255,255,255,0.1);">
-                                            <div class="progress-bar bg-purple" role="progressbar" style="width: @revenueShare%" aria-valuenow="@revenueShare" aria-valuemin="0" aria-valuemax="100"></div>
+                                            <div class="progress-bar bg-purple" role="progressbar" style="width: @performanceShare%" aria-valuenow="@performanceShare" aria-valuemin="0" aria-valuemax="100"></div>
                                         </div>
                                     </td>
                                 </tr>
@@ -218,7 +251,6 @@
         border-color: var(--neon-purple);
     }
     
-    /* KPI Grid reused from Home.razor structure but adapted */
     .kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -319,9 +351,51 @@
         background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
     }
     .panel-accent { height: 3px; width: 100%; }
+    .accent-cyan { background: linear-gradient(90deg, var(--neon-cyan), transparent); }
     .accent-purple { background: linear-gradient(90deg, var(--neon-purple), transparent); }
     .panel-inner { padding: 1.75rem; }
     
+    /* CSS Bar Chart */
+    .chart-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .chart-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .chart-label {
+        width: 200px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .chart-sublabel {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+    .chart-bar-area {
+        flex-grow: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .chart-bar {
+        height: 24px;
+        background: linear-gradient(90deg, rgba(0,240,255,0.2), rgba(0,240,255,0.8));
+        border-radius: 4px;
+        transition: width 0.5s ease-in-out;
+        box-shadow: 0 0 10px rgba(0,240,255,0.3);
+    }
+    .chart-value {
+        font-family: var(--font-mono);
+        font-size: 0.9rem;
+        font-weight: bold;
+        color: var(--neon-cyan);
+    }
+
     /* Table Enhancements */
     .table-glass th {
         font-size: 0.8rem;
@@ -384,16 +458,14 @@
 @code {
     private DateTime fromDate = DateTime.Today.AddDays(-30);
     private DateTime toDate = DateTime.Today;
+    private string selectedCategory = "All";
     private bool isLoading = true;
     private string? errorMessage;
-    private AnalyticsResponse? analyticsData;
+    private RevPAMHAnalyticsDto? analyticsData;
     private HttpClient httpClient = default!;
 
     // Derived metrics
-    private decimal TotalRevenue => analyticsData?.MachineUsage.Sum(m => m.TotalRevenue) ?? 0;
-    private int TotalSessions => analyticsData?.MachineUsage.Sum(m => m.TotalSessions) ?? 0;
-    private int TotalDurationMin => analyticsData?.MachineUsage.Sum(m => m.TotalDurationMinutes) ?? 0;
-    private string TopMachine => analyticsData?.MachineUsage.OrderByDescending(m => m.TotalRevenue).FirstOrDefault()?.MachineName ?? "N/A";
+    private string TopMachine => analyticsData?.MachineRevPAMH.OrderByDescending(m => m.RevPAMH).FirstOrDefault()?.MachineName ?? "N/A";
 
     protected override async Task OnInitializedAsync()
     {
@@ -403,18 +475,28 @@
 
     private async Task LoadData()
     {
+        // Enforce max 365 days rolling limit
+        if ((toDate - fromDate).TotalDays > 365)
+        {
+            fromDate = toDate.AddDays(-365);
+            errorMessage = "Date range adjusted to maximum allowed rolling limit of 365 days.";
+        }
+        else
+        {
+            errorMessage = null;
+        }
+
         isLoading = true;
-        errorMessage = null;
         StateHasChanged();
 
         try
         {
-            var url = $"/api/analytics/machine-usage?from={fromDate:yyyy-MM-dd}&to={toDate:yyyy-MM-dd}";
+            var url = $"/api/analytics/revpamh?from={fromDate:yyyy-MM-dd}&to={toDate:yyyy-MM-dd}&category={Uri.EscapeDataString(selectedCategory)}";
             var response = await httpClient.GetAsync(url);
 
             if (response.IsSuccessStatusCode)
             {
-                analyticsData = await response.Content.ReadFromJsonAsync<AnalyticsResponse>();
+                analyticsData = await response.Content.ReadFromJsonAsync<RevPAMHAnalyticsDto>();
             }
             else
             {
@@ -431,10 +513,15 @@
         }
     }
 
-    public class AnalyticsResponse
+    public class RevPAMHAnalyticsDto
     {
         public DateRangeDto DateRange { get; set; } = new();
-        public List<MachineUsageDto> MachineUsage { get; set; } = new();
+        public double TotalHours { get; set; }
+        public int ActiveMachineCount { get; set; }
+        public double TotalAvailableMachineHours { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public decimal SystemRevPAMH { get; set; }
+        public List<MachineRevPAMHDto> MachineRevPAMH { get; set; } = new();
     }
 
     public class DateRangeDto
@@ -443,13 +530,12 @@
         public DateTime To { get; set; }
     }
 
-    public class MachineUsageDto
+    public class MachineRevPAMHDto
     {
         public Guid MachineId { get; set; }
         public string MachineName { get; set; } = string.Empty;
-        public int TotalSessions { get; set; }
-        public int TotalDurationMinutes { get; set; }
+        public string Category { get; set; } = string.Empty;
         public decimal TotalRevenue { get; set; }
-        public double AverageDurationMinutes { get; set; }
+        public decimal RevPAMH { get; set; }
     }
 }

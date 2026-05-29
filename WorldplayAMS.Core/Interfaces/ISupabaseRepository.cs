@@ -36,5 +36,10 @@ namespace WorldplayAMS.Core.Interfaces
         Task<DigitalReceipt?> GetReceiptBySessionIdAsync(Guid sessionId);
         Task<List<DigitalReceipt>> GetReceiptsByDateRangeAsync(DateTime from, DateTime to);
         Task<DigitalReceipt?> GetReceiptByNumberAsync(string receiptNumber);
+
+        // DEV-19: Count methods for Export Size Estimation
+        Task<int> GetSessionsCountByDateRangeAsync(DateTime from, DateTime to);
+        Task<int> GetMachinesCountAsync();
+        Task<int> GetAuditLogsCountAsync();
     }
 }

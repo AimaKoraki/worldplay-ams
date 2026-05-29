@@ -111,7 +111,7 @@
                         DEV MODE
                     </div>
                     <div class="sim-tags">
-                        @foreach (var tag in new[] { "DEMO-TAG-001", "DEMO-TAG-002", "DEMO-TAG-003" })
+                        @foreach (var tag in new[] { "A1B2C3D4", "E5F6G7H8", "I9J0K1L2" })
                         {
                             <button class="btn-sim-tag" @onclick="() => SimulateTap(tag)">
                                 <span class="bi bi-upc-scan me-1"></span>@tag
@@ -597,8 +597,8 @@
             };
             var response = await client.PostAsJsonAsync("/api/sessions/process-tap", payload);
             var resultMessage = await response.Content.ReadAsStringAsync();
-            isError = resultMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
             statusMessage = resultMessage.Trim('"');
+            isError = statusMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
             ParseCheckoutResponse(statusMessage);
 
             // Reset guest fields after successful check-in

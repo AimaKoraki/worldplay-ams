@@ -16,11 +16,23 @@ namespace WorldplayAMS.Core.Models
         public string DisplayHour { get; set; } = string.Empty;
     }
 
+    public class PeakHourMatrixCellDto
+    {
+        public string DayOfWeek { get; set; } = string.Empty;
+        public int Hour { get; set; }
+        public string DisplayHour { get; set; } = string.Empty;
+        public int SessionCount { get; set; }
+        public double OccupancyPercentage { get; set; }
+        public int EstimatedGuestCount { get; set; }
+    }
+
     public class PeakHoursDto
     {
         public DateRangeDto DateRange { get; set; } = new();
         public HourlyDataDto? PeakHour { get; set; }
         public List<HourlyDataDto> HourlyData { get; set; } = new();
+        public List<PeakHourMatrixCellDto> Matrix { get; set; } = new();
+        public int MaxSessionCount { get; set; }
     }
 
     public class MachineUsageDto
@@ -46,6 +58,7 @@ namespace WorldplayAMS.Core.Models
         public string DisplayHour { get; set; } = string.Empty;
         public int AverageSessions { get; set; }
         public int RecommendedStaff { get; set; }
+        public string Confidence { get; set; } = string.Empty;
     }
 
     public class StaffingRecommendationsDto
@@ -58,6 +71,7 @@ namespace WorldplayAMS.Core.Models
     {
         public Guid MachineId { get; set; }
         public string MachineName { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
         public decimal TotalRevenue { get; set; }
         public decimal RevPAMH { get; set; }
     }

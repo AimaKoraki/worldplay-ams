@@ -167,5 +167,30 @@ namespace WorldplayAMS.API.Services
                 .Where(r => r.ReceiptNumber == receiptNumber)
                 .Single();
         }
+
+        // DEV-19: Count methods for Export Size Estimation
+        public async Task<int> GetSessionsCountByDateRangeAsync(DateTime from, DateTime to)
+        {
+            var count = await _supabase.From<Session>()
+                .Where(s => s.Status == "Completed")
+                .Filter("endtime", Postgrest.Constants.Operator.GreaterThanOrEqual, from.ToString("o"))
+                .Filter("endtime", Postgrest.Constants.Operator.LessThanOrEqual, to.ToString("o"))
+                .Count(Postgrest.Constants.CountType.Exact);
+            return count;
+        }
+
+        public async Task<int> GetMachinesCountAsync()
+        {
+            var count = await _supabase.From<ArcadeMachine>()
+                .Count(Postgrest.Constants.CountType.Exact);
+            return count;
+        }
+
+        public async Task<int> GetAuditLogsCountAsync()
+        {
+            var count = await _supabase.From<ManagerAuditLog>()
+                .Count(Postgrest.Constants.CountType.Exact);
+            return count;
+        }
     }
 }

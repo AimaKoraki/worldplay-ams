@@ -1,0 +1,290 @@
+@page "/export"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, Manager")]
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+
+<PageTitle>Worldplay AMS — Data Export</PageTitle>
+
+<div class="export-wrap">
+    <div class="export-header">
+        <h1 class="export-title">
+            <span class="bi bi-cloud-download-fill me-3 text-cyan"></span>Data Export Center
+        </h1>
+        <p class="export-subtitle">Export transactions, machine logs, and manager audit trails to CSV or XLSX.</p>
+    </div>
+
+    <div class="glass-card export-card">
+        <div class="export-form-grid">
+            
+            <!-- Category -->
+            <div class="form-group">
+                <label class="form-label">Data Category</label>
+                <select class="form-input" @bind="request.Category">
+                    <option value="Transactions">Sales & Transactions</option>
+                    <option value="Machines">Machine Inventory</option>
+                    <option value="AuditLogs">Manager Audit Logs</option>
+                </select>
+            </div>
+
+            <!-- Format -->
+            <div class="form-group">
+                <label class="form-label">File Format</label>
+                <div class="format-options">
+                    <label class="format-radio @(request.Format == "CSV" ? "active" : "")">
+                        <input type="radio" name="format" value="CSV" checked="@(request.Format == "CSV")" @onchange="@(e => request.Format = "CSV")" />
+                        <span class="bi bi-filetype-csv fs-4 mb-1"></span>
+                        CSV
+                    </label>
+                    <label class="format-radio @(request.Format == "XLSX" ? "active" : "")">
+                        <input type="radio" name="format" value="XLSX" checked="@(request.Format == "XLSX")" @onchange="@(e => request.Format = "XLSX")" />
+                        <span class="bi bi-filetype-xlsx fs-4 mb-1"></span>
+                        Excel
+                    </label>
+                </div>
+            </div>
+
+            <!-- Date Range -->
+            <div class="form-group">
+                <label class="form-label">Date Range (For Transactions)</label>
+                <div class="d-flex gap-3">
+                    <input type="date" class="form-input" @bind="request.FromDate" disabled="@(request.Category != "Transactions")" />
+                    <input type="date" class="form-input" @bind="request.ToDate" disabled="@(request.Category != "Transactions")" />
+                </div>
+            </div>
+
+        </div>
+
+        <div class="export-actions">
+            @if (currentJob == null || currentJob.Status == "Failed")
+            {
+                <button class="btn-neon btn-neon-cyan px-4 py-2" @onclick="StartExport">
+                    <span class="bi bi-download me-2"></span> Generate Export
+                </button>
+            }
+            else if (currentJob.Status == "Pending" || currentJob.Status == "Processing")
+            {
+                <button class="btn-neon btn-neon-amber px-4 py-2" disabled>
+                    <span class="bi bi-arrow-repeat rotating me-2"></span> @currentJob.Status...
+                </button>
+            }
+            else if (currentJob.Status == "Completed")
+            {
+                <button class="btn-neon btn-neon-green px-4 py-2" @onclick="DownloadFile">
+                    <span class="bi bi-check-circle-fill me-2"></span> Download Ready
+                </button>
+                <button class="btn-neon btn-neon-red ms-3 px-3 py-2" @onclick="ResetForm">
+                    <span class="bi bi-arrow-counterclockwise"></span>
+                </button>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger glass-alert mt-4">
+                <span class="bi bi-exclamation-triangle-fill me-2"></span> @errorMessage
+            </div>
+        }
+        
+        @if (currentJob != null && currentJob.Status == "Processing")
+        {
+            <div class="alert alert-info glass-alert mt-4" style="background: rgba(0, 240, 255, 0.05); border-color: rgba(0, 240, 255, 0.3); color: var(--neon-cyan);">
+                <span class="bi bi-info-circle-fill me-2"></span> Large dataset detected. Processing in the background...
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .export-wrap { padding-bottom: 2rem; max-width: 800px; margin: 0 auto; }
+    .export-header { margin-bottom: 2rem; }
+    .export-title {
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--text-primary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+    .export-subtitle { color: var(--text-secondary); margin-top: 0.5rem; }
+    
+    .export-card { padding: 2rem; border-top: 3px solid var(--neon-cyan); }
+    
+    .export-form-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        margin-bottom: 2.5rem;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
+    .form-label {
+        font-family: var(--font-heading);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+    
+    .format-options { display: flex; gap: 1rem; }
+    .format-radio {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: rgba(0,0,0,0.2);
+        border: 2px solid var(--surface-border-strong);
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: var(--text-secondary);
+        font-family: var(--font-heading);
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+    .format-radio input { display: none; }
+    .format-radio:hover { border-color: rgba(0,240,255,0.4); background: rgba(0,240,255,0.02); }
+    .format-radio.active {
+        border-color: var(--neon-cyan);
+        background: rgba(0,240,255,0.08);
+        color: var(--neon-cyan);
+        box-shadow: 0 0 20px rgba(0,240,255,0.15);
+    }
+
+    .export-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--surface-border-strong);
+    }
+
+    .rotating { animation: spin 2s linear infinite; display: inline-block; }
+    @@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+@code {
+    private ExportJobRequest request = new ExportJobRequest
+    {
+        FromDate = DateTime.Today.AddDays(-30),
+        ToDate = DateTime.Today
+    };
+
+    private ExportJobStatus? currentJob;
+    private string? errorMessage;
+    private CancellationTokenSource? pollCts;
+
+    private async Task StartExport()
+    {
+        errorMessage = null;
+        currentJob = null;
+        
+        var client = ApiClient.CreateClient();
+        try
+        {
+            var response = await client.PostAsJsonAsync("/api/exports/request", request);
+            if (response.IsSuccessStatusCode)
+            {
+                currentJob = await response.Content.ReadFromJsonAsync<ExportJobStatus>();
+                if (currentJob != null)
+                {
+                    if (currentJob.Status == "Pending" || currentJob.Status == "Processing")
+                    {
+                        pollCts = new CancellationTokenSource();
+                        _ = PollStatusAsync(currentJob.JobId, pollCts.Token);
+                    }
+                    else if (currentJob.Status == "Completed")
+                    {
+                        // Processed synchronously, no need to poll
+                        // Download will be available immediately
+                    }
+                }
+            }
+            else
+            {
+                errorMessage = "Failed to start export job.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task PollStatusAsync(Guid jobId, CancellationToken token)
+    {
+        var client = ApiClient.CreateClient();
+        while (!token.IsCancellationRequested)
+        {
+            await Task.Delay(2000, token); // Poll every 2 seconds
+            
+            try
+            {
+                var response = await client.GetAsync($"/api/exports/status/{jobId}", token);
+                if (response.IsSuccessStatusCode)
+                {
+                    var status = await response.Content.ReadFromJsonAsync<ExportJobStatus>();
+                    if (status != null)
+                    {
+                        currentJob = status;
+                        await InvokeAsync(StateHasChanged);
+
+                        if (status.Status == "Completed" || status.Status == "Failed")
+                        {
+                            if (status.Status == "Failed")
+                            {
+                                errorMessage = status.ErrorMessage ?? "Job failed.";
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore transient errors
+            }
+        }
+    }
+
+    private void DownloadFile()
+    {
+        if (currentJob?.Status == "Completed")
+        {
+            // Trigger direct download via API endpoint in a new tab/iframe
+            // We use JS Interop to navigate securely
+            var url = $"{ApiClient.CreateClient().BaseAddress}api/exports/download/{currentJob.JobId}";
+            JSRuntime.InvokeVoidAsync("window.open", url, "_blank");
+        }
+    }
+
+    private void ResetForm()
+    {
+        currentJob = null;
+        errorMessage = null;
+    }
+
+    public void Dispose()
+    {
+        pollCts?.Cancel();
+        pollCts?.Dispose();
+    }
+
+    public class ExportJobRequest
+    {
+        public DateTime FromDate { get; set; }
+        public DateTime ToDate { get; set; }
+        public string Format { get; set; } = "CSV";
+        public string Category { get; set; } = "Transactions";
+    }
+
+    public class ExportJobStatus
+    {
+        public Guid JobId { get; set; }
+        public string Status { get; set; } = "Pending";
+        public string? ErrorMessage { get; set; }
+    }
+}

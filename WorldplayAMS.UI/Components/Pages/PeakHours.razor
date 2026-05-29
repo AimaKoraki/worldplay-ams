@@ -1,0 +1,580 @@
+@page "/peak-hours"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, Manager")]
+@inject WorldplayAMS.UI.Services.ApiClient ApiClient
+@implements IDisposable
+
+<PageTitle>Worldplay AMS — Peak Hours & Facility Usage</PageTitle>
+
+<div class="dashboard-wrap">
+    <!-- Page Header -->
+    <div class="dash-header">
+        <div>
+            <h1 class="dash-title">
+                <span class="bi bi-grid-3x3-gap-fill me-3 dash-title-icon text-amber"></span>Facility Usage Analytics
+            </h1>
+            <p class="dash-subtitle">Analyze real-time traffic and historical peak hour densities</p>
+        </div>
+        <div class="dash-header-actions">
+            <div class="date-picker-group">
+                <input type="date" class="glass-input" @bind="fromDate" />
+                <span class="text-secondary mx-2">to</span>
+                <input type="date" class="glass-input" @bind="toDate" />
+                <button class="btn-neon btn-neon-amber ms-3" @onclick="LoadData">
+                    <span class="bi bi-filter"></span> Apply Filter
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="empty-state">
+            <span class="bi bi-arrow-repeat rotating text-amber" style="font-size:2.5rem;"></span>
+            <p class="mt-3">Analyzing operational density...</p>
+        </div>
+    }
+    else if (errorMessage != null)
+    {
+        <div class="alert alert-danger glass-alert">
+            <span class="bi bi-exclamation-triangle-fill me-2"></span> @errorMessage
+        </div>
+    }
+    else if (analyticsData == null || !analyticsData.Matrix.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon-ring">
+                <span class="bi bi-inbox text-secondary" style="font-size:2.5rem;"></span>
+            </div>
+            <h3 class="empty-heading mt-4">No Data Available</h3>
+            <p class="empty-desc mt-1">No sessions were found for the selected date range.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Summary Cards -->
+        <div class="kpi-grid">
+            <div class="kpi-card kpi-amber">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-amber">
+                        <span class="bi bi-people"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">@currentHeadcount</span>
+                        <span class="kpi-label">Live Headcount</span>
+                    </div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-cyan">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-cyan">
+                        <span class="bi bi-fire"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">
+                            @if(analyticsData.PeakHour != null)
+                            {
+                                @($"{analyticsData.PeakHour.DisplayHour}")
+                            }
+                            else
+                            {
+                                @("N/A")
+                            }
+                        </span>
+                        <span class="kpi-label">Historical Peak Hour</span>
+                    </div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-green">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-green">
+                        <span class="bi bi-display"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">@totalHistoricalSessions</span>
+                        <span class="kpi-label">Total Sessions Tracked</span>
+                    </div>
+                </div>
+            </div>
+            <div class="kpi-card kpi-purple">
+                <div class="kpi-accent"></div>
+                <div class="kpi-body">
+                    <div class="kpi-icon-wrap kpi-icon-purple">
+                        <span class="bi bi-clock"></span>
+                    </div>
+                    <div class="kpi-data">
+                        <span class="kpi-value">Update: @lastUpdated.ToString("HH:mm:ss")</span>
+                        <span class="kpi-label">Data Freshness</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Matrix Heatmap -->
+        <section class="panel-card mt-4">
+            <div class="panel-accent accent-amber"></div>
+            <div class="panel-inner">
+                <p class="section-title mb-4"><span class="bi bi-grid-3x3 text-amber"></span> Operational Density Grid</p>
+                
+                <div class="heatmap-legend mb-3 d-flex justify-content-end align-items-center gap-3" style="font-size: 0.8rem;">
+                    <div class="d-flex align-items-center"><span class="legend-box bg-heatmap-low me-2"></span> Low (&lt; 40%)</div>
+                    <div class="d-flex align-items-center"><span class="legend-box bg-heatmap-medium me-2"></span> Medium (40-75%)</div>
+                    <div class="d-flex align-items-center"><span class="legend-box bg-heatmap-peak me-2"></span> Peak (&gt; 75%)</div>
+                </div>
+
+                <div class="heatmap-container">
+                    <div class="heatmap-grid">
+                        <!-- Top Left Empty Cell -->
+                        <div class="heatmap-header-cell"></div>
+                        
+                        <!-- Column Headers (Days) -->
+                        @foreach (var day in new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" })
+                        {
+                            <div class="heatmap-header-cell text-center fw-bold">@day.Substring(0, 3)</div>
+                        }
+
+                        <!-- Rows (Hours) -->
+                        @for (int hour = 9; hour <= 22; hour++)
+                        {
+                            <div class="heatmap-row-header">@FormatHour(hour)</div>
+                            
+                            @foreach (var day in new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" })
+                            {
+                                var cellData = analyticsData.Matrix.FirstOrDefault(m => m.Hour == hour && m.DayOfWeek == day);
+                                if (cellData != null)
+                                {
+                                    var maxOccupancy = Math.Max(cellData.OccupancyPercentage, 0); // fallback
+                                    
+                                    // Heatmap colors based on density
+                                    string cellClass = "bg-heatmap-empty";
+                                    if (cellData.SessionCount > 0)
+                                    {
+                                        if (maxOccupancy < 40) cellClass = "bg-heatmap-low";
+                                        else if (maxOccupancy <= 75) cellClass = "bg-heatmap-medium";
+                                        else cellClass = "bg-heatmap-peak";
+                                    }
+
+                                    <div class="heatmap-cell @cellClass tooltip-container">
+                                        <!-- Tooltip Content -->
+                                        <div class="custom-tooltip">
+                                            <div class="fw-bold mb-1 border-bottom border-secondary pb-1">@day @cellData.DisplayHour</div>
+                                            <div>Avg Guests: <span class="text-info fw-bold">@cellData.EstimatedGuestCount</span></div>
+                                            <div>Active Sessions: <span class="text-warning fw-bold">@cellData.SessionCount</span></div>
+                                            <div>Occupancy: <span class="text-success fw-bold">@cellData.OccupancyPercentage.ToString("0.#")%</span></div>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="heatmap-cell bg-heatmap-empty"></div>
+                                }
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+    }
+</div>
+
+<style>
+    .dashboard-wrap { padding-bottom: 2rem; }
+    
+    .dash-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+    }
+    .dash-title {
+        font-size: 2rem;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        color: var(--text-primary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+    .dash-title-icon {
+        color: var(--neon-amber);
+        font-size: 1.6rem;
+        filter: drop-shadow(0 0 8px rgba(255,184,0,0.5));
+    }
+    .dash-subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-top: 0.35rem;
+    }
+    
+    .date-picker-group {
+        display: flex;
+        align-items: center;
+        background: var(--surface-raised);
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--surface-border);
+    }
+    
+    .glass-input {
+        background: rgba(0,0,0,0.2);
+        border: 1px solid var(--surface-border-strong);
+        color: var(--text-primary);
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        outline: none;
+        transition: border-color 0.3s;
+        color-scheme: dark;
+    }
+    .glass-input:focus {
+        border-color: var(--neon-amber);
+    }
+    
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.25rem;
+        margin-bottom: 2rem;
+    }
+    @@media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @@media (max-width: 600px) { .kpi-grid { grid-template-columns: 1fr; } }
+    
+    .kpi-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        position: relative;
+        transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+    }
+    .kpi-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .kpi-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--surface-border-strong);
+    }
+    
+    .kpi-accent { height: 3px; width: 100%; }
+    .kpi-green .kpi-accent  { background: linear-gradient(90deg, var(--status-active), transparent); }
+    .kpi-cyan .kpi-accent   { background: linear-gradient(90deg, var(--neon-cyan), transparent); }
+    .kpi-amber .kpi-accent  { background: linear-gradient(90deg, var(--neon-amber), transparent); }
+    .kpi-purple .kpi-accent { background: linear-gradient(90deg, var(--neon-purple), transparent); }
+    
+    .kpi-body {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 1.5rem 1.75rem;
+    }
+    
+    .kpi-icon-wrap {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        flex-shrink: 0;
+    }
+    .kpi-icon-green  { background: rgba(0,230,118,0.12); color: var(--status-active); }
+    .kpi-icon-cyan   { background: rgba(0,240,255,0.1);  color: var(--neon-cyan); }
+    .kpi-icon-amber  { background: rgba(255,184,0,0.1);  color: var(--neon-amber); }
+    .kpi-icon-purple { background: rgba(157,0,255,0.1);  color: var(--neon-purple); }
+    
+    .kpi-data { display: flex; flex-direction: column; }
+    .kpi-value {
+        font-family: var(--font-heading);
+        font-size: 1.85rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+        white-space: nowrap;
+    }
+    .kpi-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-top: 5px;
+    }
+
+    /* Panel Card */
+    .panel-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        box-shadow: var(--shadow-card);
+        position: relative;
+    }
+    .panel-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    }
+    .panel-accent { height: 3px; width: 100%; }
+    .accent-amber { background: linear-gradient(90deg, var(--neon-amber), transparent); }
+    .panel-inner { padding: 1.75rem; }
+    
+    /* Heatmap Matrix */
+    .heatmap-container {
+        overflow-x: auto;
+        padding-bottom: 2rem;
+    }
+    .heatmap-grid {
+        display: grid;
+        grid-template-columns: 80px repeat(7, minmax(80px, 1fr));
+        gap: 6px;
+        min-width: 600px;
+    }
+    .heatmap-header-cell {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        padding-bottom: 0.5rem;
+    }
+    .heatmap-row-header {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 1rem;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+    }
+    .heatmap-cell {
+        height: 45px;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.05);
+        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        position: relative;
+        cursor: crosshair;
+    }
+    .heatmap-cell:hover {
+        transform: scale(1.05);
+        z-index: 2;
+        border-color: rgba(255,255,255,0.5);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    
+    .bg-heatmap-empty { background-color: rgba(255,255,255,0.03); }
+    /* Green (under 40 percent) */
+    .bg-heatmap-low { background-color: rgba(0, 230, 118, 0.4); box-shadow: 0 0 5px rgba(0,230,118,0.2) inset; }
+    /* Yellow (40-75 percent) */
+    .bg-heatmap-medium { background-color: rgba(255, 184, 0, 0.6); box-shadow: 0 0 5px rgba(255,184,0,0.3) inset; }
+    /* Red (over 75 percent) */
+    .bg-heatmap-peak { background-color: rgba(255, 60, 60, 0.7); box-shadow: 0 0 5px rgba(255,60,60,0.4) inset; }
+
+    .legend-box {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+    }
+    
+    /* Custom Tooltip */
+    .tooltip-container .custom-tooltip {
+        visibility: hidden;
+        opacity: 0;
+        background-color: rgba(15, 20, 30, 0.95);
+        color: #fff;
+        text-align: left;
+        border-radius: 8px;
+        padding: 0.75rem;
+        position: absolute;
+        z-index: 10;
+        bottom: 110%;
+        left: 50%;
+        transform: translateX(-50%);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+        border: 1px solid var(--surface-border-strong);
+        transition: opacity 0.2s;
+        width: max-content;
+        pointer-events: none;
+        font-size: 0.8rem;
+    }
+    
+    .tooltip-container:hover .custom-tooltip {
+        visibility: visible;
+        opacity: 1;
+    }
+    
+    .tooltip-container .custom-tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: var(--surface-border-strong) transparent transparent transparent;
+    }
+    
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 260px;
+        color: var(--text-secondary);
+        text-align: center;
+        padding: 1rem;
+    }
+    .empty-icon-ring {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--surface-border-strong);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .empty-heading { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+    .empty-desc { font-size: 0.85rem; color: var(--text-secondary); max-width: 300px; }
+    .rotating { animation: spin 2s linear infinite; }
+    @@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+@code {
+    private DateTime fromDate = DateTime.Today.AddDays(-30);
+    private DateTime toDate = DateTime.Today;
+    private bool isLoading = true;
+    private string? errorMessage;
+    private PeakHoursDto? analyticsData;
+    private HttpClient httpClient = default!;
+    
+    // Live Headcount Timer
+    private System.Threading.Timer? refreshTimer;
+    private int currentHeadcount = 0;
+    private DateTime lastUpdated = DateTime.Now;
+
+    // Derived metrics
+    private int totalHistoricalSessions => analyticsData?.Matrix.Sum(m => m.SessionCount) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        httpClient = ApiClient.CreateClient();
+        await LoadData();
+        await FetchLiveHeadcount();
+        
+        // Start 30-second polling for live headcount (Criteria 2)
+        refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await FetchLiveHeadcount();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var url = $"/api/analytics/peak-hours?from={fromDate:yyyy-MM-dd}&to={toDate:yyyy-MM-dd}";
+            var response = await httpClient.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                analyticsData = await response.Content.ReadFromJsonAsync<PeakHoursDto>();
+            }
+            else
+            {
+                errorMessage = "Failed to load peak hours data.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error connecting to server: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+    
+    private async Task FetchLiveHeadcount()
+    {
+        try
+        {
+            var activeSessions = await httpClient.GetFromJsonAsync<List<SessionDto>>("/api/sessions/active");
+            // Estimate 1.2 guests per active session for headcount, or just return session count.
+            // In absence of explicit guest count, session count represents headcount in this model.
+            currentHeadcount = activeSessions?.Count ?? 0;
+            lastUpdated = DateTime.Now;
+        }
+        catch
+        {
+            // Ignore background fetch errors
+        }
+    }
+
+    private string FormatHour(int hour)
+    {
+        var amPm = hour >= 12 ? "PM" : "AM";
+        var hour12 = hour % 12;
+        if (hour12 == 0) hour12 = 12;
+        return $"{hour12:D2}:00 {amPm}";
+    }
+    
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
+
+    public class PeakHoursDto
+    {
+        public DateRangeDto DateRange { get; set; } = new();
+        public HourlyDataDto? PeakHour { get; set; }
+        public List<HourlyDataDto> HourlyData { get; set; } = new();
+        public List<PeakHourMatrixCellDto> Matrix { get; set; } = new();
+        public int MaxSessionCount { get; set; }
+    }
+
+    public class DateRangeDto
+    {
+        public DateTime From { get; set; }
+        public DateTime To { get; set; }
+    }
+    
+    public class HourlyDataDto
+    {
+        public int Hour { get; set; }
+        public int SessionCount { get; set; }
+        public string DisplayHour { get; set; } = string.Empty;
+    }
+
+    public class PeakHourMatrixCellDto
+    {
+        public string DayOfWeek { get; set; } = string.Empty;
+        public int Hour { get; set; }
+        public string DisplayHour { get; set; } = string.Empty;
+        public int SessionCount { get; set; }
+        public double OccupancyPercentage { get; set; }
+        public int EstimatedGuestCount { get; set; }
+    }
+    
+    public class SessionDto
+    {
+        public Guid Id { get; set; }
+        public Guid RfidTagId { get; set; }
+        public DateTime StartTime { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
+}
