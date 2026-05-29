@@ -20,17 +20,6 @@ public class GameSessionService : IGameSessionService
 
     public async Task<Session?> StartSessionAsync(string tagUid, Guid machineId)
     {
-        // For sub-3 sec speed, we can first optionally check local tag cache, but let's do a fast insert.
-        var session = new Session
-        {
-            Id = Guid.NewGuid(),
-            MachineId = machineId,
-            GuestName = "Walk-in Guest",
-            Status = "Active",
-            StartTime = DateTime.UtcNow,
-
-        };
-
         try
         {
             // Resolve RfidTagId
@@ -42,7 +31,15 @@ public class GameSessionService : IGameSessionService
                 return null;
             }
 
-            session.RfidTagId = tagResponse.Id;
+            var session = new Session
+            {
+                Id = Guid.NewGuid(),
+                MachineId = machineId,
+                GuestName = "Walk-in Guest",
+                Status = "Active",
+                StartTime = DateTime.UtcNow,
+                RfidTagId = tagResponse.Id
+            };
 
             var activeSession = await _repository.GetActiveSessionAsync(tagResponse.Id);
 
@@ -62,12 +59,8 @@ public class GameSessionService : IGameSessionService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Supabase connection failed. Falling back to optimistic memory logging.");
-            
-            // In-Memory fallback
-            _cache.Set($"offline_session_{session.Id}", session, TimeSpan.FromDays(1));
-            // We would have a background worker that checks `offline_session_*` and syncs them when back online.
-            return session;
+            _logger.LogError(ex, "Supabase connection failed or tag resolution failed.");
+            return null;
         }
     }
 

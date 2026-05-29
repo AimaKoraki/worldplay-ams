@@ -1,12 +1,8 @@
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
+using WorldplayAMS.Core.Interfaces;
 
 namespace WorldplayAMS.API.Services;
-
-public interface IFallbackCacheService
-{
-    void SaveFailedSession(string tagString, string actionType);
-}
 
 public class FallbackCacheService : IFallbackCacheService
 {

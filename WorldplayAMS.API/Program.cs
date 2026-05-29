@@ -49,7 +49,6 @@ builder.Services.AddAuthentication("Supabase")
 builder.Services.AddAuthorization(options => 
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("AdminOrManager", policy => policy.RequireRole("Admin", "Manager"));
     options.AddPolicy("AdminOrTech", policy => policy.RequireRole("Admin", "Technician"));
     options.AddPolicy("AdminOrStaff", policy => policy.RequireRole("Admin", "Staff"));
 });
@@ -325,9 +324,9 @@ app.MapPost("/api/seed", async (Supabase.Client client) =>
         logs.Add("RFID tags seeded successfully.");
 
         // Add Machines
-        var mc1 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"Cyber Racer {suffix}", MachineType = "Racing", Status = "Online" };
-        var mc2 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"VR Arena {suffix}", MachineType = "VR", Status = "Online" };
-        var mc3 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"Neon Hoops {suffix}", MachineType = "Sports", Status = "Online" };
+        var mc1 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"Cyber Racer {suffix}", MachineType = "Racing", Status = "Online", CurrentCostPerPlay = 15.00m };
+        var mc2 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"VR Arena {suffix}", MachineType = "VR", Status = "Online", CurrentCostPerPlay = 15.00m };
+        var mc3 = new WorldplayAMS.Core.Models.ArcadeMachine { Name = $"Neon Hoops {suffix}", MachineType = "Sports", Status = "Online", CurrentCostPerPlay = 15.00m };
         
         var machinesRes = await client.From<WorldplayAMS.Core.Models.ArcadeMachine>().Insert(new List<WorldplayAMS.Core.Models.ArcadeMachine> { mc1, mc2, mc3 });
         var m1 = machinesRes.Models[0];
@@ -346,7 +345,7 @@ app.MapPost("/api/seed", async (Supabase.Client client) =>
             var duration = random.Next(15, 120);
             var machine = i % 3 == 0 ? m1 : (i % 3 == 1 ? m2 : m3);
             var tag = i % 2 == 0 ? tag1 : tag2;
-            var fee = duration * 0.15m * 100; // Simulated LKR
+            var fee = duration * 15m; // Simulated LKR
 
             var start = DateTime.UtcNow.AddDays(-daysAgo).AddHours(-random.Next(1, 10));
             var end = start.AddMinutes(duration);
@@ -419,6 +418,7 @@ app.MapGet("/api/transactions/summary", async (DateTime? date, TransactionHistor
     return Results.Ok(result);
 })
 .WithName("GetTransactionSummary")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapPost("/api/audit/log", async (AuditLogDto request, TransactionHistoryService txnService) =>
@@ -427,6 +427,7 @@ app.MapPost("/api/audit/log", async (AuditLogDto request, TransactionHistoryServ
     return Results.Ok("Audit log recorded.");
 })
 .WithName("PostAuditLog")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapGet("/api/audit/logs", async (int? limit, TransactionHistoryService txnService) =>
@@ -464,6 +465,7 @@ app.MapGet("/api/receipts/search", async (string? q, DigitalReceiptService recei
     return Results.Ok(dtos);
 })
 .WithName("SearchReceipts")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapGet("/api/receipts/{sessionId}", async (Guid sessionId, DigitalReceiptService receiptService) =>
@@ -475,6 +477,7 @@ app.MapGet("/api/receipts/{sessionId}", async (Guid sessionId, DigitalReceiptSer
         result.DurationMinutes, result.Fee, result.StaffName, result.IssuedAt, result.Status });
 })
 .WithName("GetReceiptBySession")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 app.MapPost("/api/receipts/{sessionId}/email", async (Guid sessionId, EmailRequestDto request, DigitalReceiptService receiptService, IEmailService emailService) =>
@@ -492,6 +495,7 @@ app.MapPost("/api/receipts/{sessionId}/email", async (Guid sessionId, EmailReque
     return Results.StatusCode(500); // Internal server error if it failed
 })
 .WithName("EmailReceipt")
+.RequireAuthorization("AdminOrStaff")
 .WithOpenApi();
 
 // DEV-52: Staff Management Endpoints (Admin only)
@@ -522,9 +526,9 @@ app.MapPost("/api/staff", async (CreateStaffDto request, WorldplayAMS.API.Servic
     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
         return Results.BadRequest(new { error = "Email, password, and name are required." });
 
-    var validRoles = new[] { "Admin", "Manager", "Staff", "Technician" };
+    var validRoles = new[] { "Admin", "Staff", "Technician" };
     if (!validRoles.Contains(request.Role))
-        return Results.BadRequest(new { error = "Role must be Admin, Manager, Staff, or Technician." });
+        return Results.BadRequest(new { error = "Role must be Admin, Staff, or Technician." });
 
     try
     {
@@ -554,9 +558,9 @@ app.MapPost("/api/staff", async (CreateStaffDto request, WorldplayAMS.API.Servic
 
 app.MapPut("/api/staff/{id}/role", async (Guid id, UpdateRoleDto request, WorldplayAMS.API.Services.StaffService staffService, WorldplayAMS.API.Services.TransactionHistoryService txnService) =>
 {
-    var validRoles = new[] { "Admin", "Manager", "Staff", "Technician" };
+    var validRoles = new[] { "Admin", "Staff", "Technician" };
     if (!validRoles.Contains(request.Role))
-        return Results.BadRequest(new { error = "Role must be Admin, Manager, Staff, or Technician." });
+        return Results.BadRequest(new { error = "Role must be Admin, Staff, or Technician." });
 
     try
     {
@@ -653,7 +657,7 @@ app.MapGet("/api/analytics/revpamh", async (DateTime? from, DateTime? to, string
     var result = await analyticsService.GetRevPAMHAsync(fromDate, toDate, category);
     return result != null ? Results.Ok(result) : Results.StatusCode(500);
 })
-.RequireAuthorization("AdminOrManager")
+.RequireAuthorization("AdminOnly")
 .WithName("GetRevPAMH")
 .WithOpenApi();
 
@@ -697,7 +701,7 @@ app.MapPost("/api/exports/request", async (ExportJobRequest request, ExportJobSt
     }
 })
 .WithName("RequestExport")
-.RequireAuthorization("AdminOrManager")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapGet("/api/exports/status/{jobId}", (Guid jobId, ExportJobStateTracker tracker) =>
@@ -707,7 +711,7 @@ app.MapGet("/api/exports/status/{jobId}", (Guid jobId, ExportJobStateTracker tra
     return Results.Ok(status);
 })
 .WithName("GetExportStatus")
-.RequireAuthorization("AdminOrManager")
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.MapGet("/api/exports/download/{jobId}", (Guid jobId, ExportJobStateTracker tracker) =>
@@ -724,7 +728,7 @@ app.MapGet("/api/exports/download/{jobId}", (Guid jobId, ExportJobStateTracker t
     return Results.File(bytes, status.ContentType ?? "application/octet-stream", status.FileName);
 })
 .WithName("DownloadExport")
-.AllowAnonymous()
+.RequireAuthorization("AdminOnly")
 .WithOpenApi();
 
 app.Run();

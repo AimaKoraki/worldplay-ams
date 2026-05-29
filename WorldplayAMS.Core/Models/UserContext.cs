@@ -24,12 +24,6 @@ public class UserContext : BaseModel
     [Column("lastname")]
     public string? LastName { get; set; }
 
-    [Column("isactive")]
-    public bool IsActive { get; set; } = true;
-
     [Column("createdat")]
     public DateTime CreatedAt { get; set; }
-
-    [Column("updatedat")]
-    public DateTime UpdatedAt { get; set; }
 }

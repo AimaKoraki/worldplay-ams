@@ -90,9 +90,7 @@ public class StaffService
                 Email = email,
                 Name = name,
                 SystemRole = role,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow
             };
 
             await _client.From<UserContext>().Insert(userContext);
@@ -113,7 +111,6 @@ public class StaffService
             var update = await _client.From<UserContext>()
                 .Where(x => x.Id == userId)
                 .Set(x => x.SystemRole, newRole)
-                .Set(x => x.UpdatedAt, DateTime.UtcNow)
                 .Update();
             
             return update.Models.Any();

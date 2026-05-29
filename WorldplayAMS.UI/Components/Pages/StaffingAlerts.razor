@@ -487,16 +487,18 @@
         if (peakDeficit != null)
         {
             int deficit = peakDeficit.RecommendedStaff - BaselineStaff;
-            underStaffedWarning = $"Under-staffed: Recommend adding {deficit} additional staff members.";
+            underStaffedWarning = $"Under-staffed: Recommend adding {deficit} additional staff members. [{peakDeficit.Confidence}]";
         }
 
         double threshold = BaselineStaff * 0.30;
         int maxOptimizable = 0;
+        string? overStaffedConfidence = null;
 
         foreach (var day in DayNames)
         {
             int consecutiveCount = 0;
             int currentOptimizable = 0;
+            string? currentConfidence = null;
 
             for (int h = 9; h <= 22; h++)
             {
@@ -505,24 +507,30 @@
                 {
                     consecutiveCount++;
                     int savings = BaselineStaff - rec.RecommendedStaff;
-                    if (savings > currentOptimizable) currentOptimizable = savings;
+                    if (savings > currentOptimizable) 
+                    {
+                        currentOptimizable = savings;
+                        currentConfidence = rec.Confidence;
+                    }
 
                     if (consecutiveCount >= 3 && currentOptimizable > maxOptimizable)
                     {
                         maxOptimizable = currentOptimizable;
+                        overStaffedConfidence = currentConfidence ?? rec.Confidence;
                     }
                 }
                 else
                 {
                     consecutiveCount = 0;
                     currentOptimizable = 0;
+                    currentConfidence = null;
                 }
             }
         }
 
         if (maxOptimizable > 0)
         {
-            overStaffedAlert = $"Over-staffed: Opportunity to optimize roster by {maxOptimizable} staff shifts.";
+            overStaffedAlert = $"Over-staffed: Opportunity to optimize roster by {maxOptimizable} staff shifts. [{overStaffedConfidence}]";
         }
     }
 
